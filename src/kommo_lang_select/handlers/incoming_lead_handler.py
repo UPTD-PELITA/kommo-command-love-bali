@@ -5,8 +5,11 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict
 
+from kommo_lang_select.models.session import SessionCreateRequest
+
 from .base_handler import BaseHandler
-from ..models import LeadModel, SessionModel
+from ..models import LeadModel
+from ..types import COMMAND_LIST, BotID, Command
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +49,26 @@ class IncomingLeadHandler(BaseHandler):
         self.logger.debug(f"Handler can process event at path: {event_path}")
         return True
     
+    def detect_language(self, message: str) -> str | None:
+        """
+        Detect language from message based on specific patterns.
+        
+        Args:
+            message: The message text to analyze
+            
+        Returns:
+            Language code ('ID' for Indonesian, 'EN' for English) or None if not detected
+        """
+        if message == "🇮🇩 Bahasa":
+            return "ID"
+        elif message == "🇬🇧 English":
+            return "EN"
+        else:
+            return None
+    
+    def is_command(self, user_message: str) -> bool:
+        return user_message in COMMAND_LIST
+
     def handle(self, event_path: str, event_data: Any) -> None:
         """
         Handle the incoming lead event.
@@ -74,7 +97,15 @@ class IncomingLeadHandler(BaseHandler):
 
             # Get entity id from lead data
             entity_id = event_data.get('entity_id')
-            message = event_data.get('message')
+            messages = event_data.get('messages', '').strip() if event_data.get('messages') else ''
+            
+            # Convert entity_id to int if it's a string
+            if entity_id and isinstance(entity_id, str):
+                try:
+                    entity_id = int(entity_id)
+                except ValueError:
+                    self.logger.warning(f"Invalid entity_id format: {entity_id}, skipping session lookup")
+                    entity_id = None
             
             # If entity id is present, get session from firestore with entity id
             session = None
@@ -100,7 +131,7 @@ class IncomingLeadHandler(BaseHandler):
                                 # Launch salesbot with bot_id 66624 for the lead
                                 entity_type = self.kommo_service.get_entity_type_code('lead')  # '2' for lead
                                 salesbot_result = self.kommo_service.launch_salesbot(
-                                    bot_id=66624,
+                                    bot_id=BotID.LANG_SELECT_BOT_ID.value,
                                     entity_id=entity_id,
                                     entity_type=entity_type
                                 )
@@ -109,22 +140,47 @@ class IncomingLeadHandler(BaseHandler):
                                     f"Successfully launched salesbot 66624 for lead {entity_id}",
                                     extra={
                                         'entity_id': entity_id,
-                                        'bot_id': 66624,
+                                        'bot_id': BotID.LANG_SELECT_BOT_ID.value,
                                         'salesbot_result': salesbot_result
                                     }
                                 )
                                 
-                                # Add salesbot launch info to lead metadata
-                                lead.metadata['salesbot_launched'] = True
-                                lead.metadata['salesbot_id'] = 66624
-                                lead.metadata['salesbot_result'] = salesbot_result
+                                # Create a new session record for this lead
+                                session_request = SessionCreateRequest(
+                                                    entity_id=entity_id,
+                                                    language=None,  # Language will be detected later
+                                                    command=Command.MAIN_MENU,  # Default to main menu
+                                                    expires_in_hours=24,
+                                                )
+                                
+                                # Save the new session to Firestore
+                                session_success = self.firestore_service.create_session(session_request)
+
+                                if session_success:
+                                    self.logger.info(
+                                        f"Created new session {session_success.session_id} for lead {entity_id}",
+                                        extra={
+                                            'entity_id': entity_id,
+                                            'session_id': session_success.session_id,
+                                            'lead_id': lead.lead_id
+                                        }
+                                    )
+                                    
+                                    # Add session info to lead metadata
+                                    lead.metadata['new_session_created'] = True
+                                    lead.metadata['new_session_id'] = session_success.session_id
+                                else:
+                                    self.logger.error(
+                                        f"Failed to create session for lead {entity_id}",
+                                        extra={'entity_id': entity_id, 'lead_id': lead.lead_id}
+                                    )
                                 
                             except Exception as e:
                                 self.logger.error(
-                                    f"Failed to launch salesbot 66624 for lead {entity_id}: {e}",
+                                    f"Something wrong happened: {e}",
                                     extra={
                                         'entity_id': entity_id,
-                                        'bot_id': 66624,
+                                        'bot_id': BotID.LANG_SELECT_BOT_ID.value,
                                         'error': str(e)
                                     }
                                 )
@@ -143,8 +199,102 @@ class IncomingLeadHandler(BaseHandler):
                         f"Error retrieving session for entity {entity_id}: {e}",
                         extra={'entity_id': entity_id, 'error': str(e)}
                     )
+
+            self.logger.info(f"Process Message: {messages}")
+            # If message is not empty or whitespace and session exists, check for language detection
+            if messages and session:
+                # If session has no language set or language is empty, attempt to detect language from messages
+                if not session.language or session.language.strip() == "":
+                    try:
+                        if messages in ["🇮🇩 Bahasa", "🇬🇧 English"]:
+                            detected_language = self.detect_language(messages)
+                            if detected_language:
+                                session.set_language(detected_language)
+                                self.save_to_firestore(
+                                    collection='sessions',
+                                    document_id=session.session_id,
+                                    data=session.to_firestore_dict()
+                                )
+                                self.logger.info(
+                                    f"Detected and set language '{detected_language}' for session {session.session_id}",
+                                    extra={
+                                        'entity_id': entity_id,
+                                        'session_id': session.session_id,
+                                        'detected_language': detected_language
+                                    }
+                                )
+                                # Add detected language to lead metadata
+                                lead.metadata['detected_language'] = detected_language
+                            else:
+                                self.logger.warning(
+                                    f"Failed to detect language from message for session {session.session_id}",
+                                    extra={
+                                        'entity_id': entity_id,
+                                        'session_id': session.session_id,
+                                        'message_preview': messages[:50] + '...' if len(messages) > 50 else messages
+                                    }
+                                )
+                    except Exception as e:
+                        self.logger.error(
+                            f"Error detecting language from message for session {session.session_id}: {e}",
+                            extra={
+                                'entity_id': entity_id,
+                                'session_id': session.session_id,
+                                'error': str(e)
+                            },
+                            exc_info=True
+                        )
+                
+                # If session already has a language and messages is not empty, check if message is a command
+                elif session.language and self.is_command(messages):
+                    self.logger.info(
+                        f"Message is a recognized command '{messages}' for session {session.session_id}",
+                        extra={
+                            'entity_id': entity_id,
+                            'session_id': session.session_id,
+                            'current_language': session.language
+                        }
+                    )
+
+                    custom_fields = [
+                        {
+                            "field_id": 1069656,
+                            "field_name": "Custom Message",
+                            "field_code": None,
+                            "field_type": "textarea",
+                            "values": [{ "value": messages }]
+                        }
+                    ]
+                    results_update_custom_fields = self.kommo_service.update_lead_custom_fields(entity_id, custom_fields)
+                    self.logger.info(
+                        f"Updated lead {entity_id} custom fields with command message",
+                        extra={
+                            'entity_id': entity_id,
+                            'session_id': session.session_id,
+                            'command_message': messages,
+                            'update_results': results_update_custom_fields
+                        }
+                    )
+
+                    if results_update_custom_fields:
+                        entity_type = self.kommo_service.get_entity_type_code('lead')  # '2' for lead
+                        salesbot_result = self.kommo_service.launch_salesbot(
+                                        bot_id=BotID.COMMAND_PROCESSOR_BOT_ID.value,
+                                        entity_id=entity_id,
+                                        entity_type=entity_type
+                                    )
+                        self.logger.info(
+                                        f"Successfully launched salesbot {BotID.COMMAND_PROCESSOR_BOT_ID.value} for lead {entity_id}",
+                                        extra={
+                                            'entity_id': entity_id,
+                                            'bot_id': BotID.COMMAND_PROCESSOR_BOT_ID.value,
+                                            'salesbot_result': salesbot_result
+                                        }
+                                    )
+            
             
             # Save to Firestore leads collection
+            lead.mark_as_processed()  # Mark as processed before saving
             success = self.save_to_firestore(
                 collection='leads',
                 document_id=lead.lead_id,
@@ -152,16 +302,6 @@ class IncomingLeadHandler(BaseHandler):
             )
             
             if success:
-                # Mark as processed
-                lead.mark_as_processed()
-                
-                # Update the document with processed status
-                self.save_to_firestore(
-                    collection='leads',
-                    document_id=lead.lead_id,
-                    data=lead.to_firestore_dict()
-                )
-                
                 # Delete from Realtime Database
                 delete_success = self.delete_realtime_data(event_path)
                 

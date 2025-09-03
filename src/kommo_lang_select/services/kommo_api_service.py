@@ -353,6 +353,71 @@ class KommoAPIService:
         """
         return self.patch(f'leads/{lead_id}', data=lead_data)
     
+    def update_lead_custom_fields(
+        self, 
+        lead_id: int, 
+        custom_fields: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Update custom fields values for a specific lead.
+        
+        Args:
+            lead_id: Lead ID to update
+            custom_fields: List of custom field dictionaries. Each dict should contain:
+                - field_id: Custom field ID (required)
+                - field_name: Custom field name (optional)
+                - field_code: Custom field code (optional)
+                - field_type: Custom field type (optional)
+                - values: List of values, each as a dict with 'value' key (required)
+                
+        Returns:
+            JSON response with updated lead data
+            
+        Raises:
+            ValueError: If custom_fields is empty or invalid
+            
+        Example:
+            custom_fields = [
+                {
+                    "field_id": 1069656,
+                    "field_name": "Custom Message",
+                    "field_type": "textarea", 
+                    "values": [{"value": "Hello World"}]
+                }
+            ]
+            result = service.update_lead_custom_fields(12345, custom_fields)
+        """
+        if not custom_fields:
+            raise ValueError("custom_fields list cannot be empty")
+        
+        if not isinstance(custom_fields, list):
+            raise ValueError("custom_fields must be a list")
+        
+        # Validate each custom field has required fields
+        for i, field in enumerate(custom_fields):
+            if not isinstance(field, dict):
+                raise ValueError(f"Custom field {i} must be a dictionary")
+            
+            if 'field_id' not in field:
+                raise ValueError(f"Custom field {i} missing required 'field_id'")
+            
+            if 'values' not in field:
+                raise ValueError(f"Custom field {i} missing required 'values'")
+            
+            if not isinstance(field['values'], list):
+                raise ValueError(f"Custom field {i} 'values' must be a list")
+        
+        # Prepare the payload
+        lead_data = {
+            'custom_fields_values': custom_fields
+        }
+        
+        logger.debug(f"Updating custom fields for lead {lead_id}")
+        result = self.patch(f'leads/{lead_id}', data=lead_data)
+        logger.info(f"Successfully updated custom fields for lead {lead_id}")
+        
+        return result
+    
     def get_contacts(
         self,
         page: int = 1,

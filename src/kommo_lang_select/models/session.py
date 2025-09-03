@@ -9,15 +9,16 @@ from uuid import uuid4
 from pydantic import Field
 
 from .base import BaseFirestoreModel
+from ..types import Command
 
 
 class SessionModel(BaseFirestoreModel):
     """Session model for storing user session data in Firestore."""
     
     session_id: str = Field(default_factory=lambda: str(uuid4()), description="Unique session identifier")
-    entity_id: Optional[str] = Field(default=None, description="Entity identifier if authenticated")
+    entity_id: Optional[int] = Field(default=None, description="Entity identifier if authenticated")
     language: Optional[str] = Field(default=None, description="Selected language code (e.g., 'en', 'fr', 'de')")
-    command: Optional[str] = Field(default=None, description="Active command for user")
+    command: Optional[Command] = Field(default=None, description="Active command for user")
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Session creation timestamp")
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Last update timestamp")
     expires_at: Optional[datetime] = Field(default=None, description="Session expiration timestamp")
@@ -40,6 +41,10 @@ class SessionModel(BaseFirestoreModel):
                 # Firestore expects datetime objects, not ISO strings
                 data[field_name] = data[field_name]
         
+        # Convert Command enum to its value
+        if isinstance(data.get('command'), Command):
+            data['command'] = data['command'].value
+        
         return data
     
     @classmethod
@@ -57,6 +62,22 @@ class SessionModel(BaseFirestoreModel):
                 elif isinstance(data[field_name], str):
                     # ISO string
                     data[field_name] = datetime.fromisoformat(data[field_name].replace('Z', '+00:00'))
+        
+        # Convert command string back to enum
+        if 'command' in data and data['command'] and isinstance(data['command'], str):
+            try:
+                data['command'] = Command(data['command'])
+            except ValueError:
+                # If the string doesn't match any enum value, set to None
+                data['command'] = None
+        
+        # Convert entity_id string to int if necessary
+        if 'entity_id' in data and data['entity_id'] and isinstance(data['entity_id'], str):
+            try:
+                data['entity_id'] = int(data['entity_id'])
+            except ValueError:
+                # If conversion fails, set to None
+                data['entity_id'] = None
         
         return cls(**data)
     
@@ -84,10 +105,10 @@ class SessionModel(BaseFirestoreModel):
 class SessionCreateRequest(BaseFirestoreModel):
     """Request model for creating a new session."""
     
-    entity_id: Optional[str] = None
+    entity_id: Optional[int] = None
     language: Optional[str] = None
-    command: Optional[str] = None
-    expires_in_hours: Optional[int] = Field(default=24, ge=1, le=8760, description="Session duration in hours (max 1 year)")
+    command: Optional[Command] = None
+    expires_in_hours: Optional[int] = Field(default=1, ge=1, le=8760, description="Session duration in hours (max 1 year)")
     metadata: Dict[str, Any] = Field(default_factory=dict)
     
     def to_session_model(self) -> SessionModel:
@@ -110,7 +131,7 @@ class SessionUpdateRequest(BaseFirestoreModel):
     """Request model for updating an existing session."""
     
     language: Optional[str] = None
-    command: Optional[str] = None
+    command: Optional[Command] = None
     metadata: Optional[Dict[str, Any]] = None
     is_active: Optional[bool] = None
     expires_in_hours: Optional[int] = Field(default=None, ge=1, le=8760, description="Update session duration in hours")

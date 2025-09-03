@@ -9,6 +9,7 @@ applyTo: "**"
 - **Always code with industry best practices** - follow established patterns, proper error handling, type hints, and clean architecture principles
 - **Ask for clarification** when there's confusion or you need more context and additional information before proceeding
 - **Don't create unit tests or summary files or any md files** until you confirm with the user first
+- **Environment Check**: Every time you want to run code, first check for an active virtual environment or use the MCP server to get the necessary context
 
 ## Project Overview
 

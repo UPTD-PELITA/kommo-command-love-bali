@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 from kommo_lang_select.config import Settings
 from kommo_lang_select.services import FirestoreService
 from kommo_lang_select.models import SessionCreateRequest, SessionUpdateRequest
+from kommo_lang_select.types import Command
 from kommo_lang_select.logging_setup import configure_logging
 
 logger = logging.getLogger(__name__)
@@ -57,7 +58,7 @@ def main():
         session_request = SessionCreateRequest(
             entity_id="test_entity_123",
             language="en",
-            command="select_language",
+            command=Command.LANG_SELECT,
             expires_in_hours=24,
             metadata={"source": "test_script", "ip": "127.0.0.1"}
         )
@@ -84,7 +85,7 @@ def main():
         logger.info("\n✏️ Testing session update...")
         update_request = SessionUpdateRequest(
             language="fr",
-            command="process_lead",
+            command=Command.MAIN_MENU,
             metadata={"updated_by": "test_script", "last_action": "language_change"}
         )
         
@@ -107,7 +108,7 @@ def main():
         session_request2 = SessionCreateRequest(
             entity_id="test_entity_123",
             language="de",
-            command="waiting_input",
+            command=Command.LOVE_BALI,
             expires_in_hours=12,
             metadata={"source": "test_script_2", "device": "mobile"}
         )

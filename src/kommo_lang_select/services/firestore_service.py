@@ -303,7 +303,7 @@ class FirestoreService:
             logger.error(f"Failed to get sessions for user {user_id}: {e}")
             raise
     
-    def get_sessions_by_entity_id(self, entity_id: str, active_only: bool = True) -> List[SessionModel]:
+    def get_sessions_by_entity_id(self, entity_id: int, active_only: bool = True) -> List[SessionModel]:
         """
         Get all sessions for an entity.
         
@@ -339,7 +339,7 @@ class FirestoreService:
             logger.error(f"Failed to get sessions for entity {entity_id}: {e}")
             raise
     
-    def get_latest_session_by_entity_id(self, entity_id: str, active_only: bool = True) -> Optional[SessionModel]:
+    def get_latest_session_by_entity_id(self, entity_id: int, active_only: bool = True) -> Optional[SessionModel]:
         """
         Get the latest session for an entity.
         
