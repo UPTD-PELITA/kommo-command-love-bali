@@ -1,4 +1,4 @@
-"""Services package for the kommo_lang_select application."""
+"""Services package for the kommo_command application."""
 
 from .firestore_service import FirestoreService
 from .firebase_admin_listener import FirebaseAdminListener, FirebaseEvent

@@ -36,8 +36,8 @@ KOMMO_ACCESS_TOKEN=your_access_token_here
 ### Basic Service Initialization
 
 ```python
-from kommo_lang_select.services import KommoAPIService
-from kommo_lang_select.config import Settings
+from kommo_command.services import KommoAPIService
+from kommo_command.config import Settings
 
 # Load settings from environment
 settings = Settings.from_env()
@@ -159,7 +159,7 @@ custom_fields = kommo.get_custom_fields('leads')  # or 'contacts', 'companies'
 The service includes comprehensive error handling:
 
 ```python
-from kommo_lang_select.services import KommoAPIError, KommoRateLimitError, KommoAuthenticationError
+from kommo_command.services import KommoAPIError, KommoRateLimitError, KommoAuthenticationError
 
 try:
     leads = kommo.get_leads()

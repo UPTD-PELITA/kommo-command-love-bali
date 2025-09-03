@@ -1,4 +1,4 @@
-"""Models package for the kommo_lang_select application."""
+"""Models package for the kommo_command application."""
 
 from .base import BaseFirestoreModel
 from .session import SessionModel, SessionCreateRequest, SessionUpdateRequest

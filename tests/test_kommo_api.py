@@ -8,8 +8,8 @@ from pathlib import Path
 src_path = Path(__file__).parent / "src"
 sys.path.insert(0, str(src_path))
 
-from kommo_lang_select.services import KommoAPIService, KommoAPIError
-from kommo_lang_select.config import Settings
+from kommo_command.services import KommoAPIService, KommoAPIError
+from kommo_command.config import Settings
 
 
 def test_kommo_api_service():

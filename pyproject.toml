@@ -3,9 +3,9 @@ requires = ["hatchling>=1.21.1"]
 build-backend = "hatchling.build"
 
 [project]
-name = "kommo-lang-select"
+name = "kommo-command"
 version = "0.1.0"
-description = "Background worker that listens to Firebase Realtime Database changes and logs events"
+description = "Base project for creating bots that handle Kommo commands, triggered by Firebase Realtime Database changes"
 authors = [
   { name = "Your Name" }
 ]
@@ -38,10 +38,10 @@ dev = [
 ]
 
 [project.scripts]
-kommo-lang-select = "kommo_lang_select.__main__:main"
+kommo-command = "kommo_command.__main__:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/kommo_lang_select"]
+packages = ["src/kommo_command"]
 
 [tool.black]
 line-length = 100
@@ -53,7 +53,7 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 ignore = []
 
 [tool.ruff.lint.isort]
-known-first-party = ["kommo_lang_select"]
+known-first-party = ["kommo_command"]
 
 [tool.mypy]
 python_version = "3.10"

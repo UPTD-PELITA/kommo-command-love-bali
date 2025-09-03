@@ -1,4 +1,4 @@
-from kommo_lang_select.config import Settings
+from kommo_command.config import Settings
 
 
 def test_settings_from_env_path_normalization(monkeypatch):

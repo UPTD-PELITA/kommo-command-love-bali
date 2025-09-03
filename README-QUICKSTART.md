@@ -22,5 +22,5 @@ GOOGLE_SERVICE_ACCOUNT_FILE=/absolute/path/to/service-account.json
 3. Run listener
 
 ```bash
-python -m kommo_lang_select
+python -m kommo_command
 ```

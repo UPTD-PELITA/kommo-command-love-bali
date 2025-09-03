@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import Any, Dict, List, Optional, Union
 from urllib.parse import urljoin
 
@@ -16,7 +17,7 @@ logger = logging.getLogger(__name__)
 class KommoAPIError(Exception):
     """Base exception for Kommo API errors."""
     
-    def __init__(self, message: str, status_code: Optional[int] = None, response_data: Optional[Dict] = None):
+    def __init__(self, message: str, status_code: Optional[int] = None, response_data: Optional[Dict[str, Any]] = None):
         super().__init__(message)
         self.status_code = status_code
         self.response_data = response_data
@@ -81,7 +82,7 @@ class KommoAPIService:
         method: str,
         endpoint: str,
         params: Optional[Dict[str, Any]] = None,
-        data: Optional[Dict[str, Any]] = None,
+        data: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = None,
         headers: Optional[Dict[str, str]] = None,
         retry_count: int = 0,
         api_version: str = 'v4',
@@ -93,7 +94,7 @@ class KommoAPIService:
             method: HTTP method (GET, POST, PATCH, DELETE)
             endpoint: API endpoint (relative to base_url)
             params: Query parameters
-            data: Request body data
+            data: Request body data (dict or list of dicts)
             headers: Additional headers
             retry_count: Current retry attempt
             api_version: API version ('v2' or 'v4', default: 'v4')
@@ -111,12 +112,14 @@ class KommoAPIService:
         url = urljoin(base_url, endpoint.lstrip('/'))
         
         # Prepare request arguments
-        request_kwargs = {
+        request_kwargs: Dict[str, Any] = {
             'timeout': self.timeout,
-            'params': params,
-            'headers': headers,
         }
         
+        if params is not None:
+            request_kwargs['params'] = params
+        if headers is not None:
+            request_kwargs['headers'] = headers
         if data is not None:
             request_kwargs['json'] = data
         
@@ -129,7 +132,6 @@ class KommoAPIService:
                 if retry_count < self.max_retries:
                     retry_after = int(response.headers.get('Retry-After', 60))
                     logger.warning(f"Rate limit exceeded. Retrying after {retry_after} seconds")
-                    import time
                     time.sleep(retry_after)
                     return self._make_request(method, endpoint, params, data, headers, retry_count + 1, api_version)
                 else:
@@ -150,7 +152,8 @@ class KommoAPIService:
             
             # Parse JSON response
             try:
-                return response.json()
+                json_response = response.json()
+                return json_response  # type: ignore[no-any-return]
             except json.JSONDecodeError as e:
                 logger.error(f"Failed to parse JSON response: {e}")
                 return {'raw_response': response.text}
@@ -208,7 +211,7 @@ class KommoAPIService:
     def post(
         self,
         endpoint: str,
-        data: Optional[Dict[str, Any]] = None,
+        data: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = None,
         params: Optional[Dict[str, Any]] = None,
         headers: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
@@ -229,7 +232,7 @@ class KommoAPIService:
     def patch(
         self,
         endpoint: str,
-        data: Optional[Dict[str, Any]] = None,
+        data: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = None,
         params: Optional[Dict[str, Any]] = None,
         headers: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
@@ -293,7 +296,7 @@ class KommoAPIService:
         Returns:
             JSON response with leads data
         """
-        params = {
+        params: Dict[str, Any] = {
             'page': page,
             'limit': min(limit, 250),  # Kommo API limit
         }
@@ -322,7 +325,7 @@ class KommoAPIService:
         Returns:
             JSON response with lead data
         """
-        params = {}
+        params: Dict[str, Any] = {}
         if with_fields:
             params['with'] = ','.join(with_fields)
         
@@ -439,7 +442,7 @@ class KommoAPIService:
         Returns:
             JSON response with contacts data
         """
-        params = {
+        params: Dict[str, Any] = {
             'page': page,
             'limit': min(limit, 250),
         }
@@ -464,7 +467,7 @@ class KommoAPIService:
         Returns:
             JSON response with contact data
         """
-        params = {}
+        params: Dict[str, Any] = {}
         if with_fields:
             params['with'] = ','.join(with_fields)
         
@@ -516,7 +519,7 @@ class KommoAPIService:
         Returns:
             JSON response with companies data
         """
-        params = {
+        params: Dict[str, Any] = {
             'page': page,
             'limit': min(limit, 250),
         }
@@ -724,8 +727,8 @@ class KommoAPIService:
             self.session.close()
             logger.debug("Closed Kommo API session")
     
-    def __enter__(self):
+    def __enter__(self) -> KommoAPIService:
         return self
     
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         self.close()

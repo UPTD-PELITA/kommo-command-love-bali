@@ -1,4 +1,4 @@
-"""Base model classes for the kommo_lang_select application."""
+"""Base model classes for the kommo_command application."""
 
 from __future__ import annotations
 

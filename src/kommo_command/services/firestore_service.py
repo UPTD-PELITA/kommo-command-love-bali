@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 import firebase_admin
 from firebase_admin import credentials
@@ -106,6 +106,10 @@ class FirestoreService:
     
     def test_connection(self) -> bool:
         """Test the Firestore connection."""
+        if self._db is None:
+            logger.error("Firestore client is not initialized")
+            return False
+        
         try:
             # Try to write and read a test document
             test_doc_ref = self._db.collection('_connection_test').document('test')
@@ -146,6 +150,9 @@ class FirestoreService:
         Returns:
             Created SessionModel
         """
+        if self._db is None:
+            raise RuntimeError("Firestore client is not initialized")
+        
         try:
             session = session_request.to_session_model()
             
@@ -170,6 +177,9 @@ class FirestoreService:
         Returns:
             SessionModel if found, None otherwise
         """
+        if self._db is None:
+            raise RuntimeError("Firestore client is not initialized")
+        
         try:
             session_ref = self._db.collection('sessions').document(session_id)
             doc = session_ref.get()
@@ -178,7 +188,12 @@ class FirestoreService:
                 logger.debug(f"Session not found: {session_id}")
                 return None
             
-            session = SessionModel.from_firestore_dict(doc.to_dict())
+            data = doc.to_dict()
+            if data is None:
+                logger.debug(f"Session data is None for: {session_id}")
+                return None
+            
+            session = SessionModel.from_firestore_dict(data)
             logger.debug(f"Retrieved session: {session_id}")
             return session
             
@@ -197,6 +212,9 @@ class FirestoreService:
         Returns:
             Updated SessionModel if successful, None if session not found
         """
+        if self._db is None:
+            raise RuntimeError("Firestore client is not initialized")
+        
         try:
             session_ref = self._db.collection('sessions').document(session_id)
             doc = session_ref.get()
@@ -206,7 +224,11 @@ class FirestoreService:
                 return None
             
             # Get current session
-            session = SessionModel.from_firestore_dict(doc.to_dict())
+            data = doc.to_dict()
+            if data is None:
+                logger.debug(f"Session data is None for update: {session_id}")
+                return None
+            session = SessionModel.from_firestore_dict(data)
             
             # Apply updates
             update_data = {}
@@ -251,6 +273,9 @@ class FirestoreService:
         Returns:
             True if deleted, False if not found
         """
+        if self._db is None:
+            raise RuntimeError("Firestore client is not initialized")
+        
         try:
             session_ref = self._db.collection('sessions').document(session_id)
             doc = session_ref.get()
@@ -266,7 +291,7 @@ class FirestoreService:
         except Exception as e:
             logger.error(f"Failed to delete session {session_id}: {e}")
             raise
-    
+            
     def get_sessions_by_user(self, user_id: str, active_only: bool = True) -> List[SessionModel]:
         """
         Get all sessions for a user.
@@ -278,6 +303,9 @@ class FirestoreService:
         Returns:
             List of SessionModel objects
         """
+        if self._db is None:
+            raise RuntimeError("Firestore client is not initialized")
+        
         try:
             query = self._db.collection('sessions').where(filter=FieldFilter('user_id', '==', user_id))
             
@@ -288,7 +316,11 @@ class FirestoreService:
             sessions = []
             
             for doc in docs:
-                session = SessionModel.from_firestore_dict(doc.to_dict())
+                data = doc.to_dict()
+                if data is None:
+                    logger.debug(f"Session data is None for doc in user {user_id}")
+                    continue
+                session = SessionModel.from_firestore_dict(data)
                 # Check if session is expired
                 if not session.is_expired():
                     sessions.append(session)
@@ -302,7 +334,7 @@ class FirestoreService:
         except Exception as e:
             logger.error(f"Failed to get sessions for user {user_id}: {e}")
             raise
-    
+            
     def get_sessions_by_entity_id(self, entity_id: int, active_only: bool = True) -> List[SessionModel]:
         """
         Get all sessions for an entity.
@@ -314,6 +346,9 @@ class FirestoreService:
         Returns:
             List of SessionModel objects
         """
+        if self._db is None:
+            raise RuntimeError("Firestore client is not initialized")
+        
         try:
             query = self._db.collection('sessions').where(filter=FieldFilter('entity_id', '==', entity_id))
             
@@ -324,7 +359,11 @@ class FirestoreService:
             sessions = []
             
             for doc in docs:
-                session = SessionModel.from_firestore_dict(doc.to_dict())
+                data = doc.to_dict()
+                if data is None:
+                    logger.debug(f"Session data is None for doc in entity {entity_id}")
+                    continue
+                session = SessionModel.from_firestore_dict(data)
                 # Check if session is expired
                 if not session.is_expired():
                     sessions.append(session)
@@ -371,6 +410,9 @@ class FirestoreService:
         Returns:
             Number of sessions cleaned up
         """
+        if self._db is None:
+            raise RuntimeError("Firestore client is not initialized")
+        
         try:
             current_time = datetime.now(timezone.utc)
             
@@ -407,6 +449,8 @@ class FirestoreService:
     
     def get_collection_reference(self, collection_name: str):
         """Get a reference to a Firestore collection."""
+        if self._db is None:
+            raise RuntimeError("Firestore client is not initialized")
         return self._db.collection(collection_name)
     
     def close(self) -> None:

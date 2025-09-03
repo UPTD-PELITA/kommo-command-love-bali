@@ -9,8 +9,8 @@ from pathlib import Path
 # Add the src directory to Python path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from kommo_lang_select.config import Settings
-from kommo_lang_select.firebase_auth import TokenManager
+from kommo_command.config import Settings
+# from kommo_command.firebase_auth import TokenManager  # TODO: Implement or remove
 
 
 def test_firebase_connection():
@@ -24,12 +24,14 @@ def test_firebase_connection():
     print(f"🔑 Service Account: {settings.google_service_account_file}")
     print()
     
-    # Test token generation
-    token_manager = TokenManager(settings.google_service_account_file, settings.google_access_token)
-    token = token_manager.get_token()
+        # Test token generation
+    # token_manager = TokenManager(settings.google_service_account_file, settings.google_access_token)
+    # token = token_manager.get_token()
+    token = None  # TODO: Implement token generation
     
     if not token:
-        print("❌ Failed to generate OAuth token")
+        print("❌ Token generation not implemented")
+        print("💡 Skipping Firebase connection test")
         return False
     
     print("✅ OAuth token generated successfully")
@@ -58,6 +60,46 @@ def test_firebase_connection():
         return False
     
     print()
+    
+    # Test Firebase connection
+    firebase_url = f"{settings.firebase_database_url.rstrip('/')}/.json"
+    print(f"🎯 Testing Firebase connection to: {firebase_url}")
+    
+    params = {
+        "print": "pretty",
+        "shallow": "true",
+        "access_token": token
+    }
+    
+    try:
+        resp = session.get(firebase_url, params=params, timeout=10)
+        print(f"📊 HTTP Status: {resp.status_code}")
+        print(f"📋 Response Headers: {dict(resp.headers)}")
+        print(f"📄 Response Body: {resp.text[:500]}")
+        
+        if resp.status_code == 200:
+            print("✅ Firebase connection successful!")
+            return True
+        elif resp.status_code == 401:
+            print("❌ Authentication failed (401)")
+            print("💡 Possible causes:")
+            print("  - Firebase Realtime Database not enabled")
+            print("  - Service account lacks permissions")
+            print("  - Project doesn't exist or is disabled")
+            print("  - Security rules deny access")
+        elif resp.status_code == 403:
+            print("❌ Access forbidden (403)")
+            print("💡 Service account needs Firebase permissions")
+        elif resp.status_code == 404:
+            print("❌ Database not found (404)")
+            print("💡 Firebase Realtime Database may not be enabled")
+        else:
+            print(f"❌ Unexpected error: {resp.status_code}")
+        
+        return False
+    except Exception as e:
+        print(f"❌ Connection error: {e}")
+        return False
     
     # Test Firebase connection
     firebase_url = f"{settings.firebase_database_url.rstrip('/')}/.json"

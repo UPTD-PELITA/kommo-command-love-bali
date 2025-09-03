@@ -9,8 +9,8 @@ from pathlib import Path
 # Add the src directory to Python path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from kommo_lang_select.config import Settings
-from kommo_lang_select.firebase_auth import TokenManager
+from kommo_command.config import Settings
+# from kommo_command.firebase_auth import TokenManager  # TODO: Implement or remove
 
 
 def check_service_account_info():
@@ -134,11 +134,13 @@ def main():
         return False
     
     # Generate token
-    token_manager = TokenManager(settings.google_service_account_file, settings.google_access_token)
-    token = token_manager.get_token()
+    # token_manager = TokenManager(settings.google_service_account_file, settings.google_access_token)
+    # token = token_manager.get_token()
+    token = None  # TODO: Implement token generation
     
     if not token:
-        print("❌ Failed to generate OAuth token")
+        print("❌ Token generation not implemented")
+        print("💡 Skipping token-based checks")
         return False
     
     print("✅ OAuth token generated successfully")
@@ -146,10 +148,11 @@ def main():
     print()
     
     # Check project info
-    check_firebase_project_info(token)
+    # check_firebase_project_info(token)
     
     # Test multiple URLs
-    successful_urls = test_multiple_database_urls(token)
+    # successful_urls = test_multiple_database_urls(token)
+    successful_urls = []
     
     if successful_urls:
         print("🎉 SUCCESS! Working database URLs found:")

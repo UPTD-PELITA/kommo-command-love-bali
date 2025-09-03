@@ -7,8 +7,8 @@ import os
 import json
 from dotenv import load_dotenv
 
-from src.kommo_lang_select.services.kommo_api_service import KommoAPIService
-from src.kommo_lang_select.config import Settings
+from src.kommo_command.services.kommo_api_service import KommoAPIService
+from src.kommo_command.config import Settings
 
 def test_salesbot_fix():
     """Test the fixed salesbot functionality with real parameters."""

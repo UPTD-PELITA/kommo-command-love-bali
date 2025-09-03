@@ -1,6 +1,6 @@
 # Google Cloud Run Deployment Guide
 
-This guide explains how to deploy the kommo-lang-select application to Google Cloud Run.
+This guide explains how to deploy the kommo-command application to Google Cloud Run.
 
 ## Prerequisites
 
@@ -96,20 +96,20 @@ The default Cloud Run configuration includes:
 
 ```bash
 # Stream logs
-gcloud run services logs tail kommo-lang-select --region=us-central1
+gcloud run services logs tail kommo-command --region=us-central1
 
 # View recent logs
-gcloud run services logs read kommo-lang-select --region=us-central1
+gcloud run services logs read kommo-command --region=us-central1
 ```
 
 ### Service Information
 
 ```bash
 # Get service details
-gcloud run services describe kommo-lang-select --region=us-central1
+gcloud run services describe kommo-command --region=us-central1
 
 # List all revisions
-gcloud run revisions list --service=kommo-lang-select --region=us-central1
+gcloud run revisions list --service=kommo-command --region=us-central1
 ```
 
 ### Common Issues
@@ -169,11 +169,11 @@ Add environment variables in the `--set-env-vars` parameter:
 
 ```bash
 # Build locally for testing
-docker build -t kommo-lang-select .
-docker run -p 8080:8080 kommo-lang-select
+docker build -t kommo-command .
+docker run -p 8080:8080 kommo-command
 
 # Deploy specific revision if needed
-gcloud run services update-traffic kommo-lang-select \
+gcloud run services update-traffic kommo-command \
   --to-revisions=REVISION_NAME=100 \
   --region=us-central1
 ```

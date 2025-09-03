@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Cloud Run Deployment Script for kommo-lang-select
+# Cloud Run Deployment Script for kommo-command
 # 
-# This script helps deploy the kommo-lang-select application to Google Cloud Run
+# This script helps deploy the kommo-command application to Google Cloud Run
 # using Cloud Build for automated building and deployment.
 
 set -e
@@ -10,7 +10,7 @@ set -e
 # Configuration
 PROJECT_ID=${GOOGLE_CLOUD_PROJECT:-"your-project-id"}
 REGION=${REGION:-"us-central1"}
-SERVICE_NAME="kommo-lang-select"
+SERVICE_NAME="kommo-command"
 
 # Colors for output
 RED='\033[0;31m'
@@ -111,7 +111,7 @@ deploy() {
 
 # Main execution
 main() {
-    echo_info "Starting Cloud Run deployment for kommo-lang-select"
+    echo_info "Starting Cloud Run deployment for kommo-command"
     
     check_prerequisites
     enable_apis

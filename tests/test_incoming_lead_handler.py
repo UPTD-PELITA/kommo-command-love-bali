@@ -27,10 +27,10 @@ except ImportError:
 # Add the src directory to Python path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
-from kommo_lang_select.config import Settings
-from kommo_lang_select.services import FirebaseAdminListener, FirestoreService
-from kommo_lang_select.handlers import HandlerManager, IncomingLeadHandler
-from kommo_lang_select.logging_setup import configure_logging
+from kommo_command.config import Settings
+from kommo_command.services import FirebaseAdminListener, FirestoreService
+from kommo_command.handlers import HandlerManager, IncomingLeadHandler
+from kommo_command.logging_setup import configure_logging
 
 
 def test_incoming_lead_handler():

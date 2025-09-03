@@ -1,6 +1,6 @@
-# kommo-lang-select
+# kommo-command
 
-Background worker that listens to Firebase Realtime Database changes, provides session management via Firestore, and integrates with Kommo CRM via REST API.
+Base project for creating bots that handle Kommo commands, triggered by Firebase Realtime Database changes. Provides session management via Firestore and integrates with Kommo CRM via REST API.
 
 ## Features
 
@@ -40,7 +40,7 @@ Background worker that listens to Firebase Realtime Database changes, provides s
 ## Project Layout
 
 ```
-src/kommo_lang_select/
+src/kommo_command/
 ├── app.py                      # Main application entry point
 ├── config.py                   # Environment configuration
 ├── service_factory.py          # Service factory functions
@@ -132,15 +132,15 @@ LOG_LEVEL=INFO
 export $(grep -v '^#' .env | xargs) 2>/dev/null || true
 
 # Run the application
-python -m kommo_lang_select
+python -m kommo_command
 # Or use the console script
-kommo-lang-select
+kommo-command
 ```
 
 ### Session Management Examples
 
 ```python
-from kommo_lang_select import FirestoreService, SessionCreateRequest
+from kommo_command import FirestoreService, SessionCreateRequest
 
 # Initialize service
 firestore = FirestoreService(
@@ -158,7 +158,7 @@ session_request = SessionCreateRequest(
 session = firestore.create_session(session_request)
 
 # Update session language
-from kommo_lang_select import SessionUpdateRequest
+from kommo_command import SessionUpdateRequest
 update = SessionUpdateRequest(language="fr")
 updated_session = firestore.update_session(session.session_id, update)
 ```
@@ -228,8 +228,8 @@ INFO | Language selection detected: fr
 
 - **[Firestore Setup Guide](FIRESTORE_SETUP.md)** - Detailed setup instructions for Firestore
 - **[Kommo API Guide](KOMMO_API_GUIDE.md)** - Complete Kommo CRM integration documentation
-- **[API Reference](src/kommo_lang_select/models/)** - Session and lead models with validation
-- **[Configuration](src/kommo_lang_select/config.py)** - Environment variables and settings
+- **[API Reference](src/kommo_command/models/)** - Session and lead models with validation
+- **[Configuration](src/kommo_command/config.py)** - Environment variables and settings
 
 ## Security Notes
 

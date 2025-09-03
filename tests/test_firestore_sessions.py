@@ -11,11 +11,11 @@ from dotenv import load_dotenv
 # Add src to path so we can import our modules
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from kommo_lang_select.config import Settings
-from kommo_lang_select.services import FirestoreService
-from kommo_lang_select.models import SessionCreateRequest, SessionUpdateRequest
-from kommo_lang_select.types import Command
-from kommo_lang_select.logging_setup import configure_logging
+from kommo_command.config import Settings
+from kommo_command.services import FirestoreService
+from kommo_command.models import SessionCreateRequest, SessionUpdateRequest
+from kommo_command.types import Command
+from kommo_command.logging_setup import configure_logging
 
 logger = logging.getLogger(__name__)
 

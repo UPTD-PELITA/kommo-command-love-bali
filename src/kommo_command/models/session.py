@@ -1,4 +1,4 @@
-"""Session models for the kommo_lang_select application."""
+"""Session models for the kommo_command application."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ class SessionModel(BaseFirestoreModel):
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional session metadata")
     is_active: bool = Field(default=True, description="Whether the session is active")
     
-    class Config:
+    class Config(BaseFirestoreModel.Config):
         """Pydantic configuration."""
         json_encoders = {
             datetime: lambda v: v.isoformat() if v else None

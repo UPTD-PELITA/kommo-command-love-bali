@@ -5,7 +5,7 @@ import threading
 import time
 from collections.abc import Generator
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 import firebase_admin
 from firebase_admin import credentials, db
@@ -143,7 +143,7 @@ class FirebaseAdminListener:
             logger.error(f"Failed to delete data at path {target_path}: {e}")
             return False
 
-    def listen_for_changes(self, callback: callable) -> None:
+    def listen_for_changes(self, callback: Callable[[FirebaseEvent], None]) -> None:
         """Listen for changes in Firebase data."""
         def listener_callback(event):
             """Internal callback wrapper."""

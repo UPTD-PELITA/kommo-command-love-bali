@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict
 
-from kommo_lang_select.models.session import SessionCreateRequest
+from kommo_command.models.session import SessionCreateRequest
 
 from .base_handler import BaseHandler
 from ..models import LeadModel
@@ -256,41 +256,53 @@ class IncomingLeadHandler(BaseHandler):
                         }
                     )
 
-                    custom_fields = [
-                        {
-                            "field_id": 1069656,
-                            "field_name": "Custom Message",
-                            "field_code": None,
-                            "field_type": "textarea",
-                            "values": [{ "value": messages }]
-                        }
-                    ]
-                    results_update_custom_fields = self.kommo_service.update_lead_custom_fields(entity_id, custom_fields)
-                    self.logger.info(
-                        f"Updated lead {entity_id} custom fields with command message",
-                        extra={
-                            'entity_id': entity_id,
-                            'session_id': session.session_id,
-                            'command_message': messages,
-                            'update_results': results_update_custom_fields
-                        }
-                    )
-
-                    if results_update_custom_fields:
-                        entity_type = self.kommo_service.get_entity_type_code('lead')  # '2' for lead
-                        salesbot_result = self.kommo_service.launch_salesbot(
-                                        bot_id=BotID.COMMAND_PROCESSOR_BOT_ID.value,
-                                        entity_id=entity_id,
-                                        entity_type=entity_type
-                                    )
+                    if self.kommo_service and entity_id is not None:
+                        custom_fields = [
+                            {
+                                "field_id": 1069656,
+                                "field_name": "Custom Message",
+                                "field_code": None,
+                                "field_type": "textarea",
+                                "values": [{ "value": messages }]
+                            }
+                        ]
+                        results_update_custom_fields = self.kommo_service.update_lead_custom_fields(entity_id, custom_fields)
                         self.logger.info(
-                                        f"Successfully launched salesbot {BotID.COMMAND_PROCESSOR_BOT_ID.value} for lead {entity_id}",
-                                        extra={
-                                            'entity_id': entity_id,
-                                            'bot_id': BotID.COMMAND_PROCESSOR_BOT_ID.value,
-                                            'salesbot_result': salesbot_result
-                                        }
-                                    )
+                            f"Updated lead {entity_id} custom fields with command message",
+                            extra={
+                                'entity_id': entity_id,
+                                'session_id': session.session_id,
+                                'command_message': messages,
+                                'update_results': results_update_custom_fields
+                            }
+                        )
+
+                        if results_update_custom_fields:
+                            entity_type = self.kommo_service.get_entity_type_code('lead')  # '2' for lead
+                            salesbot_result = self.kommo_service.launch_salesbot(
+                                            bot_id=BotID.REPLY_CUSTOM_BOT_ID.value,
+                                            entity_id=entity_id,
+                                            entity_type=entity_type
+                                        )
+                            self.logger.info(
+                                            f"Successfully launched salesbot {BotID.REPLY_CUSTOM_BOT_ID.value} for lead {entity_id}",
+                                            extra={
+                                                'entity_id': entity_id,
+                                                'bot_id': BotID.REPLY_CUSTOM_BOT_ID.value,
+                                                'salesbot_result': salesbot_result
+                                            }
+                                        )
+                    else:
+                        if not self.kommo_service:
+                            self.logger.warning("Kommo service not available, cannot update custom fields")
+                        if entity_id is None:
+                            self.logger.warning(
+                                f"Cannot update custom fields for lead because entity_id is None",
+                                extra={
+                                    'session_id': session.session_id,
+                                    'command_message': messages
+                                }
+                            )
             
             
             # Save to Firestore leads collection
