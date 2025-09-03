@@ -17,9 +17,37 @@ class Settings(BaseModel):
         "/", description="Path within the Realtime DB to listen to, default root"
     )
 
+    # Firestore configuration
+    firebase_project_id: str = Field(
+        ...,
+        description="Firebase project ID for Firestore database"
+    )
+    firestore_database_name: str = Field(
+        default="kommo-webhook",
+        description="Firestore database name (default: kommo-webhook)"
+    )
+
     # Auth options: service account file is required for Firebase Admin SDK
     google_service_account_file: str | None = Field(
         default=None, description="Path to Google service account JSON file (required)"
+    )
+
+    # Kommo API configuration
+    kommo_client_id: str = Field(
+        ...,
+        description="Kommo OAuth client ID"
+    )
+    kommo_client_secret: str = Field(
+        ...,
+        description="Kommo OAuth client secret"
+    )
+    kommo_subdomain: str = Field(
+        ...,
+        description="Kommo account subdomain (e.g., 'example' for example.kommo.com)"
+    )
+    kommo_access_token: str = Field(
+        ...,
+        description="Kommo API access token"
     )
 
     log_level: str = Field(default="INFO", description="Logging level")
@@ -36,7 +64,13 @@ class Settings(BaseModel):
         return cls(
             firebase_database_url=os.getenv("FIREBASE_DATABASE_URL", "").rstrip("/"),
             firebase_path=os.getenv("FIREBASE_PATH", "/"),
+            firebase_project_id=os.getenv("FIREBASE_PROJECT_ID", ""),
+            firestore_database_name=os.getenv("FIRESTORE_DATABASE_NAME", "kommo-webhook"),
             google_service_account_file=os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE"),
+            kommo_client_id=os.getenv("KOMMO_CLIENT_ID", ""),
+            kommo_client_secret=os.getenv("KOMMO_CLIENT_SECRET", ""),
+            kommo_subdomain=os.getenv("KOMMO_SUBDOMAIN", ""),
+            kommo_access_token=os.getenv("KOMMO_ACCESS_TOKEN", ""),
             log_level=os.getenv("LOG_LEVEL", "INFO"),
         )
 
@@ -48,6 +82,46 @@ class Settings(BaseModel):
             return v
         if not (v.startswith("http://") or v.startswith("https://")):
             raise ValueError("FIREBASE_DATABASE_URL must start with http:// or https://")
+        return v
+
+    @field_validator("firebase_project_id")
+    @classmethod
+    def validate_project_id(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("FIREBASE_PROJECT_ID is required")
+        return v
+
+    @field_validator("kommo_client_id")
+    @classmethod
+    def validate_kommo_client_id(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("KOMMO_CLIENT_ID is required")
+        return v
+
+    @field_validator("kommo_client_secret")
+    @classmethod
+    def validate_kommo_client_secret(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("KOMMO_CLIENT_SECRET is required")
+        return v
+
+    @field_validator("kommo_subdomain")
+    @classmethod
+    def validate_kommo_subdomain(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("KOMMO_SUBDOMAIN is required")
+        return v
+
+    @field_validator("kommo_access_token")
+    @classmethod
+    def validate_kommo_access_token(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("KOMMO_ACCESS_TOKEN is required")
         return v
 
     def auth_mode(self) -> str:

@@ -1,3 +1,7 @@
+---
+applyTo: "**"
+---
+
 # AI Coding Agent Instructions for kommo-lang-select
 
 ## General Guidelines
@@ -8,15 +12,19 @@
 
 ## Project Overview
 
-Firebase Realtime Database listener - a background worker (not web service) that connects via Firebase Admin SDK and logs database events in real-time.
+Multi-service background worker that processes Firebase Realtime Database events, manages sessions in Firestore, and synchronizes data with Kommo CRM. Architecture uses an extensible handler system for event processing.
 
 ## Core Architecture
 
-**Event Flow**: `app.py` (entry/config) → `firebase_admin_listener.py` (RTDB connection) → event processing (currently logging)
+**Data Flow**: `app.py` → `service_factory.py` (service creation) → `HandlerManager` → registered handlers → Firebase/Firestore/Kommo operations
 
-**Authentication**: Firebase Admin SDK with service account JSON file (`GOOGLE_SERVICE_ACCOUNT_FILE`)
+**Services**:
 
-**Configuration**: Pydantic-based settings in `config.py` with env variable loading and validation
+- `FirebaseAdminListener` (RTDB events)
+- `FirestoreService` (session persistence)
+- `KommoAPIService` (CRM integration)
+
+**Event Processing**: Handlers inherit from `BaseHandler`, implement `can_handle()` and `handle()` methods. Manager routes events to capable handlers.
 
 ## Key Development Commands
 
@@ -24,33 +32,81 @@ Firebase Realtime Database listener - a background worker (not web service) that
 # Setup
 python3 -m venv .venv && source .venv/bin/activate && pip install -e .
 
-# Run
+# Run application
 python -m kommo_lang_select
 
-# Debug Firebase
-python test_firebase_admin.py  # Admin SDK testing
-python diagnose_firebase.py    # Comprehensive diagnostics
+# Test services independently
+python test_firebase_admin.py      # Firebase RTDB
+python test_firestore_sessions.py  # Firestore sessions
+python test_kommo_api.py           # Kommo CRM API
+python example_kommo_usage.py      # Kommo usage examples
+
+# Quality tools
+pip install -e ".[dev]"  # Install Black, Ruff, MyPy, pytest
 ```
 
 ## Required Environment Variables
 
-```
+```bash
+# Firebase (both RTDB and Firestore)
 FIREBASE_DATABASE_URL=https://project-id-default-rtdb.firebaseio.com
+FIREBASE_PROJECT_ID=your-project-id
+FIRESTORE_DATABASE_NAME=kommo-webhook
 GOOGLE_SERVICE_ACCOUNT_FILE=/absolute/path/to/serviceAccountKey.json
+
+# Kommo CRM API
+KOMMO_CLIENT_ID=oauth_client_id
+KOMMO_CLIENT_SECRET=oauth_client_secret
+KOMMO_SUBDOMAIN=account_subdomain
+KOMMO_ACCESS_TOKEN=bearer_token
 ```
 
 ## Project-Specific Patterns
 
-**Threading**: Separate listener thread + event queue + signal-aware main loop with `GracefulKiller` for clean shutdown
+**Service Creation**: Use `service_factory.py` functions instead of direct instantiation:
 
-**Firebase Events**: `@dataclass FirebaseEvent` with `event`, `path`, `data` fields
+```python
+from .service_factory import create_kommo_service, create_firestore_service
+kommo = create_kommo_service(settings)
+```
 
-**Logging**: Structured with `extra` field: `logger.info("Event", extra={"event": ..., "path": ..., "data": ...})`
+**Handler Pattern**: All event processors extend `BaseHandler`:
 
-**Error Handling**: Graceful degradation with config validation and helpful error messages
+```python
+class MyHandler(BaseHandler):
+    def can_handle(self, event_path: str, event_data: Any) -> bool:
+        return isinstance(event_data, dict) and 'my_key' in event_data
 
-**Testing**: Pytest with monkeypatch for env variables, focus on config validation
+    def handle(self, event_path: str, event_data: Any) -> None:
+        # Process -> save_to_firestore() -> delete_realtime_data()
+        # Optional: sync to Kommo if self.kommo_service available
+```
+
+**Threading**: Main thread with event queue + listener thread + `GracefulKiller` for signal handling
+
+**Models**: Inherit from `BaseFirestoreModel` for automatic serialization:
+
+```python
+class MyModel(BaseFirestoreModel):
+    def to_firestore_dict(self) -> Dict[str, Any]  # Auto-implemented
+```
+
+**Error Handling**: Services include connection testing and graceful degradation. App validates all configs before starting services.
+
+**Logging**: Structured with `extra` dict:
+
+```python
+logger.info("Event processed", extra={"path": path, "handler": handler_name})
+```
+
+## Integration Points
+
+**Firebase ↔ Kommo**: `IncomingLeadHandler` transforms Firebase events to Kommo leads via `sync_lead_to_kommo()`
+
+**RTDB ↔ Firestore**: Handlers move data from RTDB (temporary) to Firestore (persistent) then clean up source
+
+**Cross-Service**: All handlers receive all three services (Firebase, Firestore, Kommo) but Kommo is optional
 
 ## Quality Tools (pyproject.toml)
 
-Black (line length 100), Ruff (import sorting), MyPy (strict typing). Install dev deps: `pip install -e ".[dev]"`
+Black (line length 100), Ruff (import sorting + linting), MyPy (strict typing), pytest for testing.

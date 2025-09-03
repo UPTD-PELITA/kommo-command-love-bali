@@ -21,8 +21,10 @@ classifiers = [
 ]
 dependencies = [
   "firebase-admin>=6.0,<7.0",
+  "google-cloud-firestore>=2.11.0,<3.0",
   "pydantic>=2.6,<3.0",
-  "python-dotenv>=1.0,<2.0"
+  "python-dotenv>=1.0,<2.0",
+  "requests>=2.31.0,<3.0"
 ]
 
 [project.optional-dependencies]

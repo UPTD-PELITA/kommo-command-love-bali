@@ -131,6 +131,18 @@ class FirebaseAdminListener:
             logger.error(f"Failed to push data to path {target_path}: {e}")
             return None
 
+    def delete_data(self, path: str | None = None) -> bool:
+        """Delete data from Firebase at the specified path."""
+        target_path = path or self.path
+        try:
+            ref = db.reference(target_path, app=self._app)
+            ref.delete()
+            logger.info(f"Successfully deleted data at path: {target_path}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete data at path {target_path}: {e}")
+            return False
+
     def listen_for_changes(self, callback: callable) -> None:
         """Listen for changes in Firebase data."""
         def listener_callback(event):

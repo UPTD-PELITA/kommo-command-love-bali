@@ -1,30 +1,79 @@
 # kommo-lang-select
 
-Background worker that listens to Firebase Realtime Database changes and logs events.
+Background worker that listens to Firebase Realtime Database changes, provides session management via Firestore, and integrates with Kommo CRM via REST API.
 
 ## Features
 
-- Connects to Firebase Realtime Database via Firebase Admin SDK
-- Auth using Google service account JSON file
-- Logs all insert/update events to console (no HTTP server)
-- Real-time event listening with automatic reconnection
-- Typed config via environment variables
+- **Real-time Event Listening**: Connects to Firebase Realtime Database via Firebase Admin SDK
+- **Session Management**: Complete session lifecycle management using Firestore database
+- **Kommo CRM Integration**: Full REST API integration with Kommo CRM system
+- **Dual Database Support**: Uses both Firebase Realtime Database (for events) and Firestore (for sessions)
+- **Authentication**: Service account-based authentication for Firebase services
+- **Type Safety**: Fully typed configuration and models using Pydantic
+- **Auto-reconnection**: Automatic reconnection with error handling
+- **Comprehensive Logging**: Structured logging with configurable levels
+- **Event Processing**: Extensible handler system for processing various event types
 
-## Project layout
+## Architecture
 
-- `src/kommo_lang_select/`: package source
-- `src/kommo_lang_select/app.py`: app entry and main loop
-- `src/kommo_lang_select/firebase_admin_listener.py`: Firebase Admin SDK listener for RTDB
-- `src/kommo_lang_select/config.py`: env config via Pydantic
-- `src/kommo_lang_select/logging_setup.py`: logging config
+### Firebase Realtime Database
+
+- Listens for real-time events and changes
+- Handles webhooks and live data updates
+- Processes language selection events
+
+### Firestore Database (`kommo-webhook`)
+
+- Stores user session data
+- Manages session lifecycle (create, read, update, delete)
+- Handles session expiration and cleanup
+- Supports metadata storage for session context
+
+### Kommo CRM Integration
+
+- REST API integration with Kommo CRM
+- Lead synchronization from Firebase events to Kommo
+- Contact and company management
+- Custom field handling and data transformation
+- Automatic error handling and retry logic
+
+## Project Layout
+
+```
+src/kommo_lang_select/
+├── app.py                      # Main application entry point
+├── config.py                   # Environment configuration
+├── service_factory.py          # Service factory functions
+├── logging_setup.py           # Logging configuration
+├── models/                     # Data models
+│   ├── session.py             # Session models
+│   ├── lead.py                # Lead models
+│   └── base.py                # Base model classes
+├── services/                   # Service layer
+│   ├── firebase_admin_listener.py  # Realtime Database listener
+│   ├── firestore_service.py   # Firestore session management
+│   └── kommo_api_service.py    # Kommo CRM API integration
+└── handlers/                   # Event handlers
+    ├── base_handler.py         # Base handler class
+    ├── handler_manager.py      # Handler management
+    └── incoming_lead_handler.py # Lead processing handler
+
+examples/
+├── test_firestore_sessions.py  # Comprehensive test script
+├── test_kommo_api.py           # Kommo API test script
+├── example_kommo_usage.py      # Kommo usage examples
+└── example_sessions.py         # Basic usage example
+```
 
 ## Requirements
 
 - Python 3.9+
+- Firebase project with both Realtime Database and Firestore enabled
+- Service account with appropriate permissions
 
 ## Setup
 
-1. Create a virtual environment and install dependencies:
+### 1. Install Dependencies
 
 ```bash
 python3 -m venv .venv
@@ -33,49 +82,187 @@ pip install -U pip
 pip install -e .
 ```
 
-2. Configure environment:
+### 2. Firebase Setup
 
-- Copy `.env.example` to `.env` and fill values.
-- Or set environment variables directly.
+1. **Create/Configure Firebase Project**:
 
-Required:
+   - Enable Firebase Realtime Database
+   - Enable Firestore Database
+   - Create a named database called `kommo-webhook`
 
-- `FIREBASE_DATABASE_URL`: like `https://<project-id>-default-rtdb.firebaseio.com`
-- `GOOGLE_SERVICE_ACCOUNT_FILE`: path to Firebase service account JSON file
+2. **Service Account**:
+   - Go to Project Settings → Service Accounts
+   - Generate new private key (downloads JSON file)
+   - Ensure service account has:
+     - `Firebase Realtime Database Editor` role
+     - `Cloud Datastore Editor` role
 
-Optional:
+### 3. Environment Configuration
 
-- `FIREBASE_PATH` (default `/`)
-- `LOG_LEVEL` (default `INFO`)
-- `LOG_JSON` (`1` to enable JSON-like logs)
-
-## Run
+Copy `.env.example` to `.env` and configure:
 
 ```bash
-# Load env vars (if using .env)
+# Firebase Realtime Database
+FIREBASE_DATABASE_URL=https://your-project-id-default-rtdb.firebaseio.com
+FIREBASE_PATH=/
+
+# Firestore Configuration
+FIREBASE_PROJECT_ID=your-project-id
+FIRESTORE_DATABASE_NAME=kommo-webhook
+
+# Authentication
+GOOGLE_SERVICE_ACCOUNT_FILE=/path/to/serviceAccountKey.json
+
+# Kommo CRM API Configuration
+KOMMO_CLIENT_ID=your_kommo_client_id
+KOMMO_CLIENT_SECRET=your_kommo_client_secret
+KOMMO_SUBDOMAIN=your_kommo_subdomain
+KOMMO_ACCESS_TOKEN=your_kommo_access_token
+
+# Logging
+LOG_LEVEL=INFO
+```
+
+## Usage
+
+### Running the Application
+
+```bash
+# Load environment variables
 export $(grep -v '^#' .env | xargs) 2>/dev/null || true
 
-# Run
+# Run the application
 python -m kommo_lang_select
-# Or the console script
+# Or use the console script
 kommo-lang-select
 ```
 
-You should see logs like:
+### Session Management Examples
+
+```python
+from kommo_lang_select import FirestoreService, SessionCreateRequest
+
+# Initialize service
+firestore = FirestoreService(
+    project_id="your-project-id",
+    database_name="kommo-webhook",
+    service_account_path="/path/to/serviceAccountKey.json"
+)
+
+# Create a session
+session_request = SessionCreateRequest(
+    user_id="user123",
+    language="en",
+    expires_in_hours=24
+)
+session = firestore.create_session(session_request)
+
+# Update session language
+from kommo_lang_select import SessionUpdateRequest
+update = SessionUpdateRequest(language="fr")
+updated_session = firestore.update_session(session.session_id, update)
+```
+
+### Testing the Setup
+
+Run the comprehensive test scripts:
+
+```bash
+# Test Firebase and Firestore
+python test_firestore_sessions.py
+
+# Test Kommo API integration
+python test_kommo_api.py
+
+# Try Kommo usage examples
+python example_kommo_usage.py
+```
+
+Or try the basic session example:
+
+```bash
+python example_sessions.py
+```
+
+## Session Model
+
+Sessions are stored in Firestore with the following structure:
+
+```python
+{
+    "session_id": "uuid4-generated",
+    "user_id": "optional-user-id",
+    "language": "en|fr|de|es|...",
+    "created_at": "2025-09-02T10:30:00Z",
+    "updated_at": "2025-09-02T10:30:00Z",
+    "expires_at": "2025-09-03T10:30:00Z",
+    "metadata": {"custom": "data"},
+    "is_active": true
+}
+```
+
+### Key Features
+
+- **Automatic Timestamps**: `created_at` and `updated_at` managed automatically
+- **Expiration**: Optional session expiration with cleanup utilities
+- **Language Tracking**: Built-in language selection support
+- **Metadata**: Flexible storage for additional session context
+- **Type Safety**: Full Pydantic validation and type hints
+
+## Logging Output
+
+The application provides comprehensive logging:
 
 ```
-INFO | Connected to Firebase stream
-INFO | Event | event=child_added path=/some/path data={...}
+INFO | Starting Firebase services
+INFO | ✅ Realtime Database connection successful
+INFO | ✅ Firestore connection successful
+INFO | 🔥 Firebase Event Detected:
+INFO |    Event Type: child_added
+INFO |    Path: /languages/user123
+INFO |    Data: {"language": "fr"}
+INFO | Language selection detected: fr
 ```
 
-## Notes
+## Documentation
 
-- Ensure your service account has the `Firebase Realtime Database Editor` role.
-- Firebase Realtime Database must be enabled in your Firebase project.
-- This app does not expose any HTTP endpoint; it's a background listener.
+- **[Firestore Setup Guide](FIRESTORE_SETUP.md)** - Detailed setup instructions for Firestore
+- **[Kommo API Guide](KOMMO_API_GUIDE.md)** - Complete Kommo CRM integration documentation
+- **[API Reference](src/kommo_lang_select/models/)** - Session and lead models with validation
+- **[Configuration](src/kommo_lang_select/config.py)** - Environment variables and settings
 
-## Next steps (optional)
+## Security Notes
 
-- Add structured logging library (e.g., `structlog`)
-- Add unit/integration tests for the listener
-- Add processing pipeline for specific events
+- Store service account files securely outside of version control
+- Use environment variables for sensitive configuration
+- Implement proper Firestore security rules for production
+- Regularly rotate service account keys
+- Monitor Firebase usage and set up billing alerts
+
+## Troubleshooting
+
+### Common Issues
+
+1. **"Database not found"**: Ensure you've created the `kommo-webhook` database in Firestore
+2. **Permission denied**: Verify service account has required roles
+3. **Connection timeout**: Check network connectivity and Firebase project status
+4. **Import errors**: Ensure all dependencies are installed with `pip install -e .`
+
+### Debug Steps
+
+1. Run test script: `python test_firestore_sessions.py`
+2. Check Firebase Console for error logs
+3. Verify environment variables: `env | grep FIREBASE`
+4. Test service account manually in Firebase Console
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Add tests for new functionality
+4. Ensure all tests pass
+5. Submit a pull request
+
+## License
+
+MIT License - see [LICENSE](LICENSE) for details.
