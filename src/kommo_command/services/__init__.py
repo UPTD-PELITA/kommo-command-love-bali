@@ -2,7 +2,13 @@
 
 from .firestore_service import FirestoreService
 from .firebase_admin_listener import FirebaseAdminListener, FirebaseEvent
-from .kommo_api_service import KommoAPIService, KommoAPIError, KommoRateLimitError, KommoAuthenticationError
+from .kommo_api_service import (
+    KommoAPIService,
+    KommoAPIError,
+    KommoRateLimitError,
+    KommoAuthenticationError,
+)
+from .love_bali_service import LoveBaliAPIService, LoveBaliAPIError
 
 __all__ = [
     "FirestoreService",
@@ -11,5 +17,7 @@ __all__ = [
     "KommoAPIService",
     "KommoAPIError",
     "KommoRateLimitError",
-    "KommoAuthenticationError"
+    "KommoAuthenticationError",
+    "LoveBaliAPIService",
+    "LoveBaliAPIError",
 ]

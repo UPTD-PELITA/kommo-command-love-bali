@@ -50,6 +50,15 @@ class Settings(BaseModel):
         description="Kommo API access token"
     )
 
+    love_bali_base_url: str = Field(
+        default="https://lovebali.baliprov.go.id/api/v2/",
+        description="Base URL for the Love Bali API"
+    )
+    love_bali_api_token: str = Field(
+        default="",
+        description="Bearer token for Love Bali API requests"
+    )
+
     log_level: str = Field(default="INFO", description="Logging level")
 
     @field_validator("firebase_path")
@@ -71,6 +80,11 @@ class Settings(BaseModel):
             kommo_client_secret=os.getenv("KOMMO_CLIENT_SECRET", ""),
             kommo_subdomain=os.getenv("KOMMO_SUBDOMAIN", ""),
             kommo_access_token=os.getenv("KOMMO_ACCESS_TOKEN", ""),
+            love_bali_base_url=os.getenv(
+                "LOVE_BALI_BASE_URL",
+                "https://lovebali.baliprov.go.id/api/v2/",
+            ),
+            love_bali_api_token=os.getenv("LOVE_BALI_API_TOKEN", ""),
             log_level=os.getenv("LOG_LEVEL", "INFO"),
         )
 
@@ -123,6 +137,21 @@ class Settings(BaseModel):
         if not v:
             raise ValueError("KOMMO_ACCESS_TOKEN is required")
         return v
+
+    @field_validator("love_bali_base_url")
+    @classmethod
+    def validate_love_bali_base_url(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            return "https://lovebali.baliprov.go.id/api/v2/"
+        if not (v.startswith("http://") or v.startswith("https://")):
+            raise ValueError("LOVE_BALI_BASE_URL must start with http:// or https://")
+        return v if v.endswith("/") else f"{v}/"
+
+    @field_validator("love_bali_api_token")
+    @classmethod
+    def normalize_love_bali_api_token(cls, v: str) -> str:
+        return v.strip()
 
     def auth_mode(self) -> str:
         if self.google_service_account_file:

@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from .config import Settings
-from .services import KommoAPIService, FirestoreService, FirebaseAdminListener
+from .services import (
+    KommoAPIService,
+    FirestoreService,
+    FirebaseAdminListener,
+    LoveBaliAPIService,
+)
 
 
 def create_kommo_service(settings: Settings) -> KommoAPIService:
@@ -57,4 +60,20 @@ def create_firebase_listener(settings: Settings) -> FirebaseAdminListener:
         database_url=settings.firebase_database_url,
         path=settings.firebase_path,
         service_account_path=settings.google_service_account_file,
+    )
+
+
+def create_love_bali_service(settings: Settings) -> LoveBaliAPIService:
+    """
+    Create a Love Bali API service instance from settings.
+
+    Args:
+        settings: Application settings
+
+    Returns:
+        Configured LoveBaliAPIService instance
+    """
+    return LoveBaliAPIService(
+        base_url=settings.love_bali_base_url,
+        api_token=settings.love_bali_api_token,
     )

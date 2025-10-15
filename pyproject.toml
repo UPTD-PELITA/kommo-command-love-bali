@@ -7,7 +7,8 @@ name = "kommo-command"
 version = "0.1.0"
 description = "Base project for creating bots that handle Kommo commands, triggered by Firebase Realtime Database changes"
 authors = [
-  { name = "I Made Hendra Wijaya" }
+  { name = "I Made Hendra Wijaya" },
+  { name = "Ganeis Sapanca" }
 ]
 readme = "README.md"
 requires-python = ">=3.9"

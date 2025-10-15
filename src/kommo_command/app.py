@@ -12,7 +12,7 @@ from .config import Settings
 from .config_validator import print_config_help, validate_firebase_config
 from .services import FirebaseAdminListener, FirestoreService, KommoAPIService
 from .service_factory import create_kommo_service, create_firestore_service, create_firebase_listener
-from .handlers import HandlerManager, IncomingLeadHandler
+from .handlers import HandlerManager, IncomingLeadHandler, IncomingMessageHandler
 from .logging_setup import configure_logging
 
 
@@ -139,6 +139,14 @@ def run(settings: Settings | None = None) -> None:
         logger.info("Initializing event handler system...")
         handler_manager = HandlerManager()
         
+        # Register incoming message handler (logs message payloads)
+        incoming_message_handler = IncomingMessageHandler(
+            firestore_service=firestore_service,
+            realtime_listener=realtime_listener,
+            kommo_service=kommo_service,
+        )
+        handler_manager.register_handler(incoming_message_handler)
+
         # Register incoming lead handler
         incoming_lead_handler = IncomingLeadHandler(
             firestore_service=firestore_service,
