@@ -1,47 +1,61 @@
-"""Handler for responding to incoming Firebase messages."""
+"""Handler for logging incoming Firebase messages."""
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from .base_handler import BaseHandler
-from ..models.session import SessionUpdateRequest
+from ..types import BotID
 
 
 class IncomingMessageHandler(BaseHandler):
-    """Handler that prompts users for passport numbers after each message."""
+    """Handler that logs incoming messages from Firebase to the console."""
 
     MESSAGE_KEYS = ("message", "messages", "text", "body")
-    PASSPORT_PROMPTS = {
-        "EN": "Enter passport number",
-        "ID": "Masukkan nomor paspor",
-    }
-    WAITING_FOR_PASSPORT_STATE = "waiting_input_no_passport"
-    STEP_PREFIX = "[IncomingMessageHandler]"
+    CUSTOM_MESSAGE_FIELD_ID = 1069656
+    PASSPORT_PROMPT = "Please enter your passport number"
+    DEFAULT_ENTITY_TYPE = "2"
 
     def can_handle(self, event_path: str, event_data: Any) -> bool:
-        """Return True when the payload contains a user-facing message we can display."""
+        """
+        Determine whether this handler should process the event.
+
+        Args:
+            event_path: Firebase event path
+            event_data: Firebase event data
+
+        Returns:
+            True when the payload contains a user-facing message we can display.
+        """
+
+        self.logger.debug("Check if can handle incoming message")
+        
         if not event_data:
             return False
 
         if isinstance(event_data, str):
-            return bool(event_data.strip())
+            return False
 
         if isinstance(event_data, dict):
+            entity_id = event_data.get("entity_id")
+            if entity_id is None:
+                return False
+            if isinstance(entity_id, str) and not entity_id.strip():
+                return False
+
             for key in self.MESSAGE_KEYS:
                 value = event_data.get(key)
                 if isinstance(value, str) and value.strip():
                     return True
-                if isinstance(value, list) and any(
-                    isinstance(item, str) and item.strip() for item in value
-                ):
-                    return True
+                if isinstance(value, list):
+                    if any(isinstance(item, str) and item.strip() for item in value):
+                        return True
             return False
 
         return False
 
     def handle(self, event_path: str, event_data: Any) -> None:
-        """Log the message content, reply with a passport prompt, and update session state."""
+        """Process an incoming message and trigger Kommo updates."""
         message_text = self._extract_message(event_data)
         if not message_text:
             self.logger.debug(
@@ -60,35 +74,102 @@ class IncomingMessageHandler(BaseHandler):
                 "payload_message": message_text,
             },
         )
-        print(f"{self.STEP_PREFIX} Step 1: Received user message -> {message_text}")
+        print(f"[IncomingMessageHandler] {message_text}")
 
-        raw_session_id = self._extract_session_id(event_path, event_data)
         entity_id = self._extract_entity_id(event_data)
-        session = self._fetch_session(raw_session_id, entity_id)
-        session_id = raw_session_id or (getattr(session, "session_id", None) if session else None)
-
-        language = self._determine_language(event_data, session)
-        prompt = self._localize_passport_prompt(language)
-
-        prompt_sent = self._send_language_prompt(session_id, prompt, language)
-        if prompt_sent:
-            print(
-                f"{self.STEP_PREFIX} Step 2: Prompted user with '{prompt}' in language {language}"
+        if entity_id is None:
+            self.logger.warning(
+                "Incoming message missing valid entity_id",
+                extra={
+                    "path": event_path,
+                    "payload_message": message_text,
+                },
             )
+            return
+
+        entity_type = self._resolve_entity_type(event_data)
+        session = self._get_session_for_entity(entity_id)
+
+        if session:
+            custom_field_value = self.PASSPORT_PROMPT
+            session_id = getattr(session, "session_id", None)
         else:
-            print(
-                f"{self.STEP_PREFIX} Step 2: Skipped sending prompt (missing session context)"
-            )
+            custom_field_value = message_text
+            session_id = None
 
-        state_updated = self._update_session_state(session_id, entity_id)
-        if state_updated:
-            print(
-                f"{self.STEP_PREFIX} Step 3: Session state set to {self.WAITING_FOR_PASSPORT_STATE}"
+        custom_fields = [
+            {
+                "field_id": self.CUSTOM_MESSAGE_FIELD_ID,
+                "field_name": "Custom Message",
+                "field_code": None,
+                "field_type": "textarea",
+                "values": [{"value": custom_field_value}],
+            }
+        ]
+
+        if not self.kommo_service:
+            self.logger.warning(
+                "Kommo service unavailable; skipping lead update",
+                extra={"entity_id": entity_id, "path": event_path},
             )
-        else:
-            print(
-                f"{self.STEP_PREFIX} Step 3: Skipped session state update (session not found)"
+            return
+
+        try:
+            update_result = self.kommo_service.update_lead_custom_fields(entity_id, custom_fields)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            self.logger.error(
+                "Failed to update lead custom fields",
+                extra={
+                    "entity_id": entity_id,
+                    "session_found": bool(session),
+                    "session_id": session_id,
+                    "error": str(exc),
+                },
+                exc_info=True,
             )
+            return
+
+        self.logger.info(
+            "Updated lead custom fields from incoming message",
+            extra={
+                "entity_id": entity_id,
+                "session_found": bool(session),
+                "session_id": session_id,
+                "custom_field_value": custom_field_value,
+                "update_result": update_result,
+            },
+        )
+
+        try:
+            salesbot_result = self.kommo_service.launch_salesbot(
+                bot_id=BotID.REPLY_CUSTOM_BOT_ID.value,
+                entity_id=entity_id,
+                entity_type=entity_type,
+            )
+        except Exception as exc:  # pragma: no cover - defensive logging
+            self.logger.error(
+                "Failed to launch salesbot",
+                extra={
+                    "entity_id": entity_id,
+                    "entity_type": entity_type,
+                    "session_found": bool(session),
+                    "session_id": session_id,
+                    "error": str(exc),
+                },
+                exc_info=True,
+            )
+            return
+
+        self.logger.info(
+            "Salesbot launched for lead after incoming message",
+            extra={
+                "entity_id": entity_id,
+                "entity_type": entity_type,
+                "session_found": bool(session),
+                "session_id": session_id,
+                "salesbot_result": salesbot_result,
+            },
+        )
 
     def _extract_message(self, event_data: Any) -> str | None:
         """Extract the first non-empty message string from the event payload."""
@@ -110,178 +191,54 @@ class IncomingMessageHandler(BaseHandler):
 
         return None
 
-    def _extract_session_id(self, event_path: str, event_data: Any) -> Optional[str]:
-        """Infer the session identifier from payload or event path."""
-        if isinstance(event_data, dict):
-            for key in ("session_id", "sessionId"):
-                value = event_data.get(key)
-                if isinstance(value, str) and value.strip():
-                    return value.strip()
-
-        parts = [part for part in event_path.split("/") if part]
-        for index, part in enumerate(parts[:-1]):
-            if part in {"sessions", "messages", "incoming_messages"} and index + 1 < len(parts):
-                candidate = parts[index + 1]
-                if candidate and candidate not in {"messages", "incoming", "outgoing"}:
-                    return candidate
-        return None
-
-    def _extract_entity_id(self, event_data: Any) -> Optional[int]:
-        """Extract the Kommo entity identifier when available."""
+    def _extract_entity_id(self, event_data: Any) -> int | None:
+        """Extract and normalize the entity identifier from the payload."""
         if not isinstance(event_data, dict):
             return None
 
-        for key in ("entity_id", "entityId", "lead_id", "leadId"):
-            value = event_data.get(key)
-            if isinstance(value, int):
-                return value
-            if isinstance(value, str) and value.strip():
-                try:
-                    return int(value)
-                except ValueError:
-                    self.logger.debug(
-                        "Unable to convert entity id to int",
-                        extra={"key": key, "value": value},
-                    )
-        return None
-
-    def _fetch_session(self, session_id: Optional[str], entity_id: Optional[int]):
-        """Retrieve the latest session using session or entity identifiers."""
-        if session_id:
-            try:
-                session = self.firestore_service.get_session(session_id)
-                if session:
-                    return session
-            except Exception as exc:
-                self.logger.error(
-                    "Failed to fetch session by session_id",
-                    extra={"session_id": session_id, "error": str(exc)},
-                    exc_info=True,
-                )
-
-        if entity_id is not None:
-            try:
-                return self.firestore_service.get_latest_session_by_entity_id(entity_id)
-            except Exception as exc:
-                self.logger.error(
-                    "Failed to fetch session by entity_id",
-                    extra={"entity_id": entity_id, "error": str(exc)},
-                    exc_info=True,
-                )
-        return None
-
-    def _determine_language(self, event_data: Any, session: Any) -> str:
-        """Resolve the language preference with sensible fallbacks."""
-        if isinstance(event_data, dict):
-            for key in ("language", "lang", "locale"):
-                value = event_data.get(key)
-                if isinstance(value, str) and value.strip():
-                    return value.strip().upper()
-
-        session_language = getattr(session, "language", None)
-        if isinstance(session_language, str) and session_language.strip():
-            return session_language.strip().upper()
-
-        return "EN"
-
-    def _localize_passport_prompt(self, language: str) -> str:
-        """Return the localized passport prompt for the requested language."""
-        normalized = language.upper()
-        return self.PASSPORT_PROMPTS.get(normalized, self.PASSPORT_PROMPTS["EN"])
-
-    def _send_language_prompt(self, session_id: Optional[str], prompt: str, language: str) -> bool:
-        """Send the localized passport prompt back to Firebase."""
-        if not session_id:
-            self.logger.warning(
-                "Cannot send passport prompt without a session identifier",
-                extra={"language": language},
-            )
-            return False
-
-        payload: Dict[str, Any] = {
-            "message": prompt,
-            "language": language,
-            "state": self.WAITING_FOR_PASSPORT_STATE,
-            "handler": self.__class__.__name__,
-        }
-        response_path = self._build_absolute_path("responses", session_id)
+        entity_id = event_data.get("entity_id")
+        if entity_id is None:
+            return None
 
         try:
-            self.realtime_listener.write_data(payload, path=response_path)
-            self.logger.info(
-                "Sent passport prompt to Firebase",
-                extra={
-                    "session_id": session_id,
-                    "language": language,
-                    "response_path": response_path,
-                },
-            )
-            return True
-        except Exception as exc:
-            self.logger.error(
-                "Failed to send passport prompt",
-                extra={"session_id": session_id, "error": str(exc)},
-                exc_info=True,
-            )
-            return False
-
-    def _update_session_state(
-        self,
-        session_id: Optional[str],
-        entity_id: Optional[int],
-    ) -> bool:
-        """Persist the waiting state in Firestore and mirror it to Realtime Database."""
-        if not session_id:
+            return int(entity_id)
+        except (TypeError, ValueError):
             self.logger.warning(
-                "Cannot update session state without a session identifier",
+                "Invalid entity_id format in incoming message",
                 extra={"entity_id": entity_id},
             )
-            return False
+            return None
 
+    def _resolve_entity_type(self, event_data: Any) -> str:
+        """Resolve Kommo entity type code for launching the salesbot."""
+        if isinstance(event_data, dict):
+            raw_type = event_data.get("entity_type")
+            if isinstance(raw_type, int):
+                raw_type = str(raw_type)
+
+            if isinstance(raw_type, str):
+                cleaned = raw_type.strip()
+                if cleaned in {"1", "2"}:
+                    return cleaned
+                if self.kommo_service:
+                    try:
+                        return self.kommo_service.get_entity_type_code(cleaned)
+                    except Exception:
+                        self.logger.debug(
+                            "Unable to resolve entity_type from payload; falling back to default",
+                            extra={"entity_type": cleaned},
+                        )
+
+        return self.DEFAULT_ENTITY_TYPE
+
+    def _get_session_for_entity(self, entity_id: int):
+        """Retrieve the latest session for a given entity, if any."""
         try:
-            update_request = SessionUpdateRequest(
-                metadata={"state": self.WAITING_FOR_PASSPORT_STATE}
-            )
-            updated_session = self.firestore_service.update_session(session_id, update_request)
-            if updated_session is None:
-                self.logger.warning(
-                    "Session not found while attempting to update state",
-                    extra={"session_id": session_id, "entity_id": entity_id},
-                )
-                return False
-
-            state_path = self._build_absolute_path("sessions", session_id, "state")
-            self.realtime_listener.write_data(
-                self.WAITING_FOR_PASSPORT_STATE,
-                path=state_path,
-            )
-
-            self.logger.info(
-                "Updated session state to waiting for passport",
-                extra={
-                    "session_id": session_id,
-                    "entity_id": entity_id,
-                    "state_path": state_path,
-                },
-            )
-            return True
-        except Exception as exc:
+            return self.firestore_service.get_latest_session_by_entity_id(entity_id)
+        except Exception as exc:  # pragma: no cover - defensive logging
             self.logger.error(
-                "Failed to persist session state",
-                extra={"session_id": session_id, "entity_id": entity_id, "error": str(exc)},
+                "Failed to retrieve session for entity",
+                extra={"entity_id": entity_id, "error": str(exc)},
                 exc_info=True,
             )
-            return False
-
-    def _build_absolute_path(self, *segments: str) -> str:
-        """Compose an absolute Firebase path using the listener base path."""
-        base = self.realtime_listener.path.strip("/")
-        base_prefix = f"/{base}" if base else ""
-        extra = "/".join(segment.strip("/") for segment in segments if segment)
-        if base_prefix and extra:
-            return f"{base_prefix}/{extra}"
-        if base_prefix:
-            return base_prefix or "/"
-        if extra:
-            return f"/{extra}"
-        return "/"
+            return None

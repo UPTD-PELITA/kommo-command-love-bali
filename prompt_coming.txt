@@ -1,0 +1,20 @@
+Your task is to update the IncomingMessageHandler when a message arrives. 
+Check that the message has an entity_id and that the message has a session.
+If a session is not found, update the lead custom fields with the values
+custom_fields = [
+                            {
+                                "field_id": 1069656,
+                                "field_name": "Custom Message",
+                                "field_code": None,
+                                "field_type": "textarea",
+                                "values": [{ "value": messages }]
+                            }
+                        ]
+and then run the update_lead_custom_fields function.
+After successfully updating the custom fields, launch the salesbot as follows:
+salesbot_result = self.kommo_service.launch_salesbot(
+                                            bot_id=BotID.REPLY_CUSTOM_BOT_ID.value,
+                                            entity_id=entity_id,
+                                            entity_type=entity_type
+                                        )
+If a session is found, update the lead, but differentiate the values ​​with "Please enter your passport number" and launch the salesbot.

@@ -1,11 +1,10 @@
 import logging
 import sys
-from types import ModuleType, SimpleNamespace
+from typing import Any
+from types import ModuleType
 from unittest.mock import MagicMock
 
-import pytest
-
-from kommo_command.models.session import SessionUpdateRequest
+import pytest  # type: ignore[import]
 
 
 def _ensure_firebase_stubs() -> None:
@@ -130,44 +129,46 @@ def _ensure_firebase_stubs() -> None:
 
 _ensure_firebase_stubs()
 
+from kommo_command.handlers import BaseHandler, HandlerManager
 from kommo_command.handlers.incoming_message_handler import IncomingMessageHandler
+from kommo_command.types import BotID
 
 
 @pytest.fixture
 def handler():
-    firestore = MagicMock()
-    realtime = MagicMock()
-    kommo = MagicMock()
-    instance = IncomingMessageHandler(
-        firestore_service=firestore,
-        realtime_listener=realtime,
-        kommo_service=kommo,
+    firestore_service = MagicMock()
+    firestore_service.get_latest_session_by_entity_id.return_value = None
+
+    kommo_service = MagicMock()
+    kommo_service.get_entity_type_code.return_value = "2"
+    kommo_service.update_lead_custom_fields.return_value = {"updated": True}
+    kommo_service.launch_salesbot.return_value = {"status": "ok"}
+
+    return IncomingMessageHandler(
+        firestore_service=firestore_service,
+        realtime_listener=MagicMock(),
+        kommo_service=kommo_service,
     )
-    return instance
 
 
 def test_can_handle_dict_message(handler):
-    event_data = {"message": "Hello"}
+    event_data = {"message": "Hello", "entity_id": 101}
     assert handler.can_handle("/messages/123", event_data)
 
 
 def test_can_handle_string(handler):
-    assert handler.can_handle("/messages/123", "Hi there")
+    assert not handler.can_handle("/messages/123", "Hi there")
 
 
 def test_can_handle_rejects_empty(handler):
     assert not handler.can_handle("/messages/123", " ")
-    assert not handler.can_handle("/messages/123", {})
+    assert not handler.can_handle("/messages/123", {"entity_id": 55})
 
 
 def test_handle_logs_and_prints_message(handler, caplog, capsys):
     caplog.set_level(logging.INFO)
 
-    session = SimpleNamespace(session_id="sess-1", language="EN", metadata={})
-    handler.firestore_service.get_session.return_value = session
-    handler.firestore_service.update_session.return_value = session
-
-    handler.handle("/messages/sess-1", {"message": "Hello there", "session_id": "sess-1"})
+    handler.handle("/messages/abc", {"message": "Hello there", "entity_id": 777})
 
     assert "Incoming message received" in caplog.text
 
@@ -176,69 +177,103 @@ def test_handle_logs_and_prints_message(handler, caplog, capsys):
     assert getattr(records[0], "payload_message", None) == "Hello there"
 
     captured = capsys.readouterr()
-    assert "Step 1" in captured.out
     assert "Hello there" in captured.out
-    assert "Step 2" in captured.out
-    assert "Step 3" in captured.out
-
-    # Ensure the localized prompt was sent and state persisted
-    assert handler.realtime_listener.write_data.call_count == 2
-    call_args_list = handler.realtime_listener.write_data.call_args_list
-
-    prompt_args = call_args_list[0].args
-    prompt_kwargs = call_args_list[0].kwargs
-    state_args = call_args_list[1].args
-    state_kwargs = call_args_list[1].kwargs
-
-    assert prompt_args[0]["message"] == "Enter passport number"
-    assert prompt_args[0]["language"] == "EN"
-    assert prompt_kwargs["path"].endswith("/responses/sess-1")
-
-    assert state_args[0] == handler.WAITING_FOR_PASSPORT_STATE
-    assert state_kwargs["path"].endswith("/sessions/sess-1/state")
-
-    update_call = handler.firestore_service.update_session.call_args
-    assert update_call is not None
-    _, update_request = update_call[0]
-    assert isinstance(update_request, SessionUpdateRequest)
-    assert update_request.metadata == {"state": handler.WAITING_FOR_PASSPORT_STATE}
 
 
 def test_handle_without_message(handler, caplog):
     caplog.set_level(logging.DEBUG)
 
-    handler.handle("/messages/abc", {"other": "value"})
+    handler.handle("/messages/abc", {"other": "value", "entity_id": 88})
 
     assert "Incoming message received" not in caplog.text
-    handler.realtime_listener.write_data.assert_not_called()
-    handler.firestore_service.update_session.assert_not_called()
+    handler.kommo_service.update_lead_custom_fields.assert_not_called()
 
 
-def test_handle_uses_session_language_when_payload_missing(handler):
-    session = SimpleNamespace(session_id="sess-99", language="ID", metadata={})
-    handler.firestore_service.get_session.return_value = session
-    handler.firestore_service.update_session.return_value = session
+def test_handle_updates_lead_without_session(handler):
+    handler.firestore_service.get_latest_session_by_entity_id.return_value = None
 
-    handler.handle("/messages/sess-99", {"message": "Halo"})
+    handler.handle(
+        "/messages/abc",
+        {"message": "Thanks for the help", "entity_id": "12345", "entity_type": "lead"},
+    )
 
-    prompt_args = handler.realtime_listener.write_data.call_args_list[0].args
-    assert prompt_args[0]["message"] == "Masukkan nomor paspor"
-    assert prompt_args[0]["language"] == "ID"
+    handler.firestore_service.get_latest_session_by_entity_id.assert_called_once_with(12345)
+    handler.kommo_service.update_lead_custom_fields.assert_called_once()
+
+    _, custom_fields = handler.kommo_service.update_lead_custom_fields.call_args[0]
+    assert custom_fields[0]["values"][0]["value"] == "Thanks for the help"
+
+    handler.kommo_service.launch_salesbot.assert_called_once_with(
+        bot_id=BotID.REPLY_CUSTOM_BOT_ID.value,
+        entity_id=12345,
+        entity_type="2",
+    )
 
 
-def test_handle_skips_when_session_unknown(handler, capsys):
-    handler.firestore_service.get_session.return_value = None
-    handler.firestore_service.update_session.return_value = None
+def test_handle_session_found_uses_passport_prompt(handler):
+    session = MagicMock()
+    session.session_id = "sess-1"
+    handler.firestore_service.get_latest_session_by_entity_id.return_value = session
 
-    handler.handle("/messages/abc", {"message": "Hi"})
+    handler.handle(
+        "/messages/abc",
+        {"message": "Need passport assistance", "entity_id": 456},
+    )
 
-    captured = capsys.readouterr()
-    assert "Step 2" in captured.out
-    assert "Skipped session state update" in captured.out
+    handler.kommo_service.update_lead_custom_fields.assert_called_once()
+    _, custom_fields = handler.kommo_service.update_lead_custom_fields.call_args[0]
+    assert custom_fields[0]["values"][0]["value"] == "Please enter your passport number"
 
-    # Only the prompt write should occur because session state update fails early
-    handler.realtime_listener.write_data.assert_called_once()
-    prompt_args = handler.realtime_listener.write_data.call_args.args
-    assert prompt_args[0]["message"] == "Enter passport number"
+    handler.kommo_service.launch_salesbot.assert_called_once_with(
+        bot_id=BotID.REPLY_CUSTOM_BOT_ID.value,
+        entity_id=456,
+        entity_type="2",
+    )
 
-    handler.firestore_service.update_session.assert_called_once()
+
+def test_handler_manager_uses_incoming_message_handler_as_default(handler):
+    manager = HandlerManager()
+
+    original_handle = handler.handle
+    handler.handle = MagicMock(side_effect=original_handle)
+
+    manager.register_handler(handler, default=True)
+
+    manager.process_event("/unmatched/event", {"entity_id": 24601})
+
+    handler.handle.assert_called_once_with("/unmatched/event", {"entity_id": 24601})
+
+
+class _DummyHandler(BaseHandler):
+    def __init__(self) -> None:
+        super().__init__(
+            firestore_service=MagicMock(),
+            realtime_listener=MagicMock(),
+            kommo_service=MagicMock(),
+        )
+
+    def can_handle(self, event_path: str, event_data: Any) -> bool:  # type: ignore[override]
+        return True
+
+    def handle(self, event_path: str, event_data: Any) -> None:  # type: ignore[override]
+        pass
+
+
+def test_handler_manager_always_calls_default(handler):
+    manager = HandlerManager()
+
+    original_default_handle = handler.handle
+    handler.handle = MagicMock(side_effect=original_default_handle)
+    manager.register_handler(handler, default=True)
+
+    specific_handler = _DummyHandler()
+    specific_handler.handle = MagicMock()
+    specific_handler.can_handle = MagicMock(return_value=True)
+    manager.register_handler(specific_handler)
+
+    event_payload = {"message": "Welcome aboard", "entity_id": 314}
+
+    manager.process_event("/leads/314", event_payload)
+
+    handler.handle.assert_called_once_with("/leads/314", event_payload)
+    specific_handler.handle.assert_called_once_with("/leads/314", event_payload)

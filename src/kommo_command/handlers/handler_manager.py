@@ -6,28 +6,40 @@ import logging
 from typing import Any, List
 
 from .base_handler import BaseHandler
-from ..services import FirebaseAdminListener
 
 logger = logging.getLogger(__name__)
 
 
 class HandlerManager:
     """Manager class for coordinating Firebase event handlers."""
-    
+
     def __init__(self) -> None:
         """Initialize the handler manager."""
         self.handlers: List[BaseHandler] = []
+        self.default_handler: BaseHandler | None = None
         self.logger = logging.getLogger(self.__class__.__name__)
-    
-    def register_handler(self, handler: BaseHandler) -> None:
+
+    def register_handler(self, handler: BaseHandler, *, default: bool = False) -> None:
         """
         Register a new handler.
-        
+
         Args:
             handler: Handler instance to register
+            default: Whether this handler should be used as the fallback option
         """
         self.handlers.append(handler)
-        self.logger.info(f"Registered handler: {handler.__class__.__name__}")
+
+        if default:
+            self.default_handler = handler
+            self.logger.info(
+                "Registered default handler",
+                extra={"handler": handler.__class__.__name__},
+            )
+        else:
+            self.logger.info(
+                "Registered handler",
+                extra={"handler": handler.__class__.__name__},
+            )
     
     def unregister_handler(self, handler: BaseHandler) -> None:
         """
@@ -38,7 +50,12 @@ class HandlerManager:
         """
         if handler in self.handlers:
             self.handlers.remove(handler)
-            self.logger.info(f"Unregistered handler: {handler.__class__.__name__}")
+            if self.default_handler is handler:
+                self.default_handler = None
+            self.logger.info(
+                "Unregistered handler",
+                extra={"handler": handler.__class__.__name__},
+            )
     
     def process_event(self, event_path: str, event_data: Any) -> None:
         """
@@ -50,18 +67,37 @@ class HandlerManager:
         """
         self.logger.debug(f"Processing event at path: {event_path}")
         
-        # Find handlers that can process this event
-        capable_handlers = []
+        default_handler = self.default_handler
+        capable_handlers: List[BaseHandler] = []
+        non_default_handlers: List[BaseHandler] = []
+
         for handler in self.handlers:
+            if handler is default_handler:
+                continue
+
             try:
                 if handler.can_handle(event_path, event_data):
-                    capable_handlers.append(handler)
+                    non_default_handlers.append(handler)
             except Exception as e:
                 self.logger.error(
                     f"Error checking if {handler.__class__.__name__} can handle event: {e}",
                     exc_info=True
                 )
-        
+
+        if default_handler is not None:
+            capable_handlers.append(default_handler)
+
+            if not non_default_handlers:
+                self.logger.info(
+                    "Default handler processing event (no specific handlers matched)",
+                    extra={
+                        "event_path": event_path,
+                        "default_handler": default_handler.__class__.__name__,
+                    },
+                )
+
+        capable_handlers.extend(non_default_handlers)
+
         if not capable_handlers:
             self.logger.debug(f"No handlers found for event at path: {event_path}")
             return
@@ -103,7 +139,8 @@ class HandlerManager:
             {
                 'name': handler.__class__.__name__,
                 'module': handler.__class__.__module__,
-                'type': str(type(handler))
+                'type': str(type(handler)),
+                'is_default': handler is self.default_handler,
             }
             for handler in self.handlers
         ]
@@ -112,4 +149,5 @@ class HandlerManager:
         """Clear all registered handlers."""
         handler_count = len(self.handlers)
         self.handlers.clear()
+        self.default_handler = None
         self.logger.info(f"Cleared {handler_count} handler(s)")

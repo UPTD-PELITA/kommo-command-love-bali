@@ -145,15 +145,15 @@ def run(settings: Settings | None = None) -> None:
             realtime_listener=realtime_listener,
             kommo_service=kommo_service,
         )
-        handler_manager.register_handler(incoming_message_handler)
+        handler_manager.register_handler(incoming_message_handler, default=True)
 
         # Register incoming lead handler
-        incoming_lead_handler = IncomingLeadHandler(
-            firestore_service=firestore_service,
-            realtime_listener=realtime_listener,
-            kommo_service=kommo_service
-        )
-        handler_manager.register_handler(incoming_lead_handler)
+        # incoming_lead_handler = IncomingLeadHandler(
+        #     firestore_service=firestore_service,
+        #     realtime_listener=realtime_listener,
+        #     kommo_service=kommo_service
+        # )
+        # handler_manager.register_handler(incoming_lead_handler)
         
         logger.info("✅ Event handler system initialized")
         logger.info(f"Registered handlers: {[h['name'] for h in handler_manager.get_handler_info()]}")
