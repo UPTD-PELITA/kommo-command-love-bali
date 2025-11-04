@@ -17,13 +17,23 @@ class Command(Enum):
     MAIN_MENU = "Main Menu"
     LANG_SELECT = "Lang Select"
     LOVE_BALI = "Love Bali"
-    SIGAPURA = "SigaPura"
+    SIGAPURA = "Sigapura"
     CHAT_OPERATOR = "Chat Operator"
 
 class BotID(Enum):
     """Enum for bot IDs."""
     LANG_SELECT_BOT_ID = 66624  # Language Selection Bot
-    REPLY_CUSTOM_BOT_ID = 64729    # Love Bali Bot
+    REPLY_CUSTOM_BOT_ID = 64728    # Love Bali Bot
+
+class AppState(Enum):
+    """Enum for application states."""
+    INITIAL = "initial"
+    AWAITING_PASSPORT_NUMBER = "awaiting_passport_number"
+
+class AppLanguage(Enum):
+    """Enum for application languages."""
+    ENGLISH = "EN"
+    INDONESIAN = "ID"
     
 
 # List of command strings for easy checking against user messages

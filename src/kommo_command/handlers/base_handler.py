@@ -6,7 +6,12 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any, Dict
 
-from ..services import FirebaseAdminListener, FirestoreService, KommoAPIService
+from ..services import (
+    FirebaseAdminListener,
+    FirestoreService,
+    KommoAPIService,
+    LoveBaliAPIService,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +24,7 @@ class BaseHandler(ABC):
         firestore_service: FirestoreService,
         realtime_listener: FirebaseAdminListener,
         kommo_service: KommoAPIService | None = None,
+        love_bali_service: LoveBaliAPIService | None = None,
     ) -> None:
         """
         Initialize the base handler.
@@ -31,6 +37,7 @@ class BaseHandler(ABC):
         self.firestore_service = firestore_service
         self.realtime_listener = realtime_listener
         self.kommo_service = kommo_service
+        self.love_bali_service = love_bali_service
         self.logger = logging.getLogger(self.__class__.__name__)
     
     @abstractmethod

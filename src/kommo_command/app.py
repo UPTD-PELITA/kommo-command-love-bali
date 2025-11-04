@@ -10,8 +10,13 @@ from dotenv import load_dotenv
 
 from .config import Settings
 from .config_validator import print_config_help, validate_firebase_config
-from .services import FirebaseAdminListener, FirestoreService, KommoAPIService
-from .service_factory import create_kommo_service, create_firestore_service, create_firebase_listener
+from .services import FirebaseAdminListener, FirestoreService, KommoAPIService, LoveBaliAPIService
+from .service_factory import (
+    create_kommo_service,
+    create_firestore_service,
+    create_firebase_listener,
+    create_love_bali_service,
+)
 from .handlers import HandlerManager, IncomingLeadHandler, IncomingMessageHandler
 from .logging_setup import configure_logging
 
@@ -96,10 +101,11 @@ def run(settings: Settings | None = None) -> None:
         print()  # Add some spacing
 
     # Initialize services
-    realtime_listener = None
-    firestore_service = None
-    kommo_service = None
-    handler_manager = None
+    realtime_listener: FirebaseAdminListener | None = None
+    firestore_service: FirestoreService | None = None
+    kommo_service: KommoAPIService | None = None
+    love_bali_service: LoveBaliAPIService | None = None
+    handler_manager: HandlerManager | None = None
     
     try:
         # Initialize Kommo API service
@@ -113,6 +119,10 @@ def run(settings: Settings | None = None) -> None:
             sys.exit(1)
         logger.info("✅ Kommo API connection successful")
         
+        # Initialize Love Bali API service
+        logger.info("Initializing Love Bali API service...")
+        love_bali_service = create_love_bali_service(settings)
+
         # Initialize Realtime Database listener
         logger.info("Initializing Firebase Realtime Database listener...")
         realtime_listener = create_firebase_listener(settings)
@@ -144,6 +154,7 @@ def run(settings: Settings | None = None) -> None:
             firestore_service=firestore_service,
             realtime_listener=realtime_listener,
             kommo_service=kommo_service,
+            love_bali_service=love_bali_service,
         )
         handler_manager.register_handler(incoming_message_handler, default=True)
 
@@ -169,6 +180,8 @@ def run(settings: Settings | None = None) -> None:
         def signal_services_stop():
             if kommo_service:
                 kommo_service.close()
+            if love_bali_service:
+                love_bali_service.close()
             if realtime_listener:
                 realtime_listener.close()
             if firestore_service:
@@ -179,7 +192,7 @@ def run(settings: Settings | None = None) -> None:
         # Start listening for events in a separate thread so we can handle signals
         event_queue = []
         event_lock = threading.Lock()
-        listener_error = [None]  # Use list to allow modification from nested function
+        listener_error: list[Exception | None] = [None]  # Use list to allow modification from nested function
         
         def listener_thread():
             try:
@@ -244,6 +257,8 @@ def run(settings: Settings | None = None) -> None:
     finally:
         if kommo_service:
             kommo_service.close()
+        if love_bali_service:
+            love_bali_service.close()
         if realtime_listener:
             realtime_listener.close()
         if firestore_service:

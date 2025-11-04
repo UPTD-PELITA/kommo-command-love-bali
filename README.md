@@ -1,9 +1,9 @@
 # kommo-command for Love Bali
 
 ##Author
+
 - Kadek Ganeis Jayarani Sapanca https://www.instagram.com/ganeissapancaa/
 - I Made Hendra Wijaya https://imadehendrawijaya.com
-s
 
 Base project for creating bots that handle Kommo commands, triggered by Firebase Realtime Database changes. Provides session management via Firestore and integrates with Kommo CRM via REST API.
 
