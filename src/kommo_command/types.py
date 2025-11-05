@@ -24,6 +24,8 @@ class BotID(Enum):
     """Enum for bot IDs."""
     LANG_SELECT_BOT_ID = 66624  # Language Selection Bot
     REPLY_CUSTOM_BOT_ID = 64728    # Love Bali Bot
+    MAIN_MENU_EN_BOT_ID = 70676  # Main Menu English Bot
+    MAIN_MENU_ID_BOT_ID = 70674  # Main Menu Indonesian Bot
 
 class AppState(Enum):
     """Enum for application states."""

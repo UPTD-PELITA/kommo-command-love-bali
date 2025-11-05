@@ -383,7 +383,98 @@ class FirestoreService:
         except Exception as e:
             logger.error(f"Failed to get sessions for entity {entity_id}: {e}")
             raise
-    
+
+    def get_latest_active_session(self, entity_id: int) -> Optional[SessionModel]:
+        """Get the most recently updated active session for a specific entity that has not expired."""
+        if not self._db:
+            logger.error("Firestore client not initialized")
+            return None
+
+        try:
+            query = (
+                self._db.collection('sessions')
+                .where(filter=FieldFilter('entity_id', '==', entity_id))
+                .where(filter=FieldFilter('is_active', '==', True))
+                .order_by('updated_at', direction=firestore.Query.DESCENDING)
+                .limit(5)
+            )
+
+            for doc in query.stream():
+                data = doc.to_dict()
+                if not data:
+                    continue
+
+                session = SessionModel.from_firestore_dict(data)
+                if session.is_expired():
+                    self.update_session(session.session_id, SessionUpdateRequest(is_active=False))
+                    continue
+
+                logger.debug(f"Retrieved latest active session for entity {entity_id}: {session.session_id}")
+                return session
+
+            logger.debug(f"No active, non-expired sessions found for entity {entity_id}")
+            return None
+
+        except Exception as e:
+            if "requires an index" in str(e):
+                logger.warning(
+                    "Index required for latest active session query by entity; please configure it in Firebase Console"
+                )
+                return None
+            logger.error(f"Failed to get latest active session for entity {entity_id}: {e}")
+            raise
+
+    def get_active_session_for_entity(self, entity_id: int) -> Optional[SessionModel]:
+        """Return the best available active session for an entity, with graceful fallbacks."""
+        session = self.get_latest_active_session(entity_id)
+        if session:
+            return session
+
+        logger.debug(
+            "Falling back to non-indexed session lookup for entity %s", entity_id
+        )
+
+        try:
+            fallback_session = self.get_latest_session_by_entity_id(entity_id, active_only=False)
+        except Exception as exc:
+            logger.error(
+                "Fallback session lookup failed for entity %s: %s",
+                entity_id,
+                exc,
+            )
+            return None
+
+        if not fallback_session:
+            return None
+
+        if fallback_session.is_expired():
+            logger.info(
+                "Fallback session for entity %s is expired", entity_id,
+                extra={"session_id": fallback_session.session_id},
+            )
+            if fallback_session.is_active:
+                try:
+                    self.update_session(
+                        fallback_session.session_id,
+                        SessionUpdateRequest(is_active=False),
+                    )
+                except Exception as exc:
+                    logger.debug(
+                        "Failed to deactivate expired fallback session %s: %s",
+                        fallback_session.session_id,
+                        exc,
+                    )
+            return None
+
+        if not fallback_session.is_active:
+            logger.debug(
+                "Fallback session for entity %s is inactive", entity_id,
+                extra={"session_id": fallback_session.session_id},
+            )
+            return None
+
+        return fallback_session
+
     def get_latest_session_by_entity_id(self, entity_id: int, active_only: bool = True) -> Optional[SessionModel]:
         """
         Get the latest session for an entity.

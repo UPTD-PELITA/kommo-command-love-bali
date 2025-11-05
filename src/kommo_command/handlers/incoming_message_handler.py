@@ -6,6 +6,7 @@ import re
 from typing import Any
 
 from .base_handler import BaseHandler
+from ..models.session import SessionModel, SessionUpdateRequest
 from ..messages import MessageKey, get_message
 from ..types import BotID, AppState, AppLanguage, Command
 from ..services import LoveBaliAPIError
@@ -91,17 +92,18 @@ class IncomingMessageHandler(BaseHandler):
                     entity_id = None
             
             # Define session variable
-            session = None
+            session: SessionModel | None = None
             if entity_id:
                 try:
-                    session = self.firestore_service.get_latest_session_by_entity_id(entity_id)
-                    if not session:
-                        self.logger.info(f"No session found for entity_id: {entity_id}")
+                    session = self.firestore_service.get_active_session_for_entity(entity_id)
                 except Exception as exc:
                     self.logger.error(
                         f"Failed to retrieve session for entity_id {entity_id}: {exc}",
                         extra={"entity_id": entity_id}
                     )
+
+                if not session:
+                    self.logger.info(f"No session found for entity_id: {entity_id}")
                 
                 self.logger.debug(f"Start checking app_state {app_state} for entity_id: {entity_id}")
 
@@ -133,6 +135,7 @@ class IncomingMessageHandler(BaseHandler):
                             )
                         else:
                             isError = False
+                            isFound = False
                             error_message = ""
                             message_params = {
                                 "code_voucher": "-",
@@ -163,6 +166,7 @@ class IncomingMessageHandler(BaseHandler):
                                 success_template = get_message(MessageKey.PASSPORT_FOUND, language=user_lang)
                                 try:
                                     response_message = success_template.format(**message_params)
+                                    isFound = True
                                 except (KeyError, ValueError):
                                     response_message = success_template
 
@@ -196,13 +200,14 @@ class IncomingMessageHandler(BaseHandler):
                                 if not error_message:
                                     error_message = get_message(MessageKey.PASSPORT_ERROR, language=user_lang)
                                 response_message = error_message
-
+    
                             if response_message:
                                 self.send_message(entity_id=entity_id, message=response_message)
                             
-                            if session is not None:
+                            self.logger.debug(f"isFound: {isFound} for sesion: {session}")
+                            if session and isFound:
+                                self.logger.debug(f"Updating session to MAIN_MENU for entity_id: {entity_id}")
                                 # Create update request for session
-                                from ..models.session import SessionUpdateRequest
                                 update_request = SessionUpdateRequest(command=Command.MAIN_MENU)
                                 
                                 # Update session in Firestore
@@ -210,6 +215,9 @@ class IncomingMessageHandler(BaseHandler):
                                     session_id=session.session_id,
                                     update_request=update_request
                                 )
+                                if updated_session:
+                                    self.show_main_menu(entity_id=entity_id, language=user_lang)
+                                
 
 
                 #delete data after processed
@@ -274,17 +282,9 @@ class IncomingMessageHandler(BaseHandler):
                 exc_info=True,
             )
 
+        
         try:
             entity_type = self.kommo_service.get_entity_type_code('lead')
-        except Exception as exc:
-            self.logger.error(
-                "Failed to resolve entity type for lead",
-                extra={"entity_id": entity_id, "error": str(exc)},
-                exc_info=True,
-            )
-            return
-
-        try:
             salesbot_result = self.kommo_service.launch_salesbot(
                 bot_id=BotID.REPLY_CUSTOM_BOT_ID.value,
                 entity_id=entity_id,
@@ -302,6 +302,36 @@ class IncomingMessageHandler(BaseHandler):
             self.logger.error(
                 f"Failed to launch salesbot {BotID.REPLY_CUSTOM_BOT_ID.value} for lead {entity_id}: {exc}",
                 extra={"entity_id": entity_id, "bot_id": BotID.REPLY_CUSTOM_BOT_ID.value},
+                exc_info=True,
+            )
+    
+    def show_main_menu(self, entity_id: int, language: str) -> None:
+        """Show the main menu to the user based on their language preference."""
+        if not self.kommo_service:
+            self.logger.warning(
+                "Kommo service unavailable; skipping show_main_menu",
+                extra={"entity_id": entity_id},
+            )
+            return
+
+        main_menu_bot_id = BotID.MAIN_MENU_EN_BOT_ID.value if language == AppLanguage.ENGLISH.value else BotID.MAIN_MENU_ID_BOT_ID.value
+
+        try:
+            self.logger.debug(f"Launching main menu bot {main_menu_bot_id} for entity_id: {entity_id}")
+            entity_type = self.kommo_service.get_entity_type_code('lead')
+            self.kommo_service.launch_salesbot(
+                bot_id=main_menu_bot_id,
+                entity_id=entity_id,
+                entity_type=entity_type,
+            )
+            self.logger.info(
+                f"Successfully launched main menu bot {main_menu_bot_id} for entity_id: {entity_id}",
+                extra={"entity_id": entity_id, "bot_id": main_menu_bot_id},
+            )
+        except Exception as exc:
+            self.logger.error(
+                f"Failed to launch main menu bot {main_menu_bot_id} for entity_id {entity_id}: {exc}",
+                extra={"entity_id": entity_id, "bot_id": main_menu_bot_id},
                 exc_info=True,
             )
 
