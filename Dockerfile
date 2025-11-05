@@ -15,12 +15,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy pyproject.toml and install dependencies
-COPY pyproject.toml ./
-RUN pip install --no-cache-dir .
-
-# Copy the source code
+# Copy pyproject.toml, README.md and source code
+COPY pyproject.toml README.md ./
 COPY src/ ./src/
+
+# Install the package
+RUN pip install --no-cache-dir .
 
 # Create a non-root user for security
 RUN groupadd -r appuser && useradd -r -g appuser appuser

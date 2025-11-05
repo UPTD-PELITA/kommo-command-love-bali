@@ -24,7 +24,8 @@ coverage.xml
 .ruff_cache
 
 # Virtual environments
-.env
+# NOTE: .env file is copied during CI/CD build (created from GitHub secrets)
+# but will be ignored if present locally
 .venv
 env/
 venv/
@@ -49,7 +50,8 @@ ehthumbs.db
 Thumbs.db
 
 # Documentation
-README.md
+# README.md is needed for package metadata
+# README.md
 README-QUICKSTART.md
 docs/
 

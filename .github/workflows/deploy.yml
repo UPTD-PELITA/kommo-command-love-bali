@@ -1,0 +1,100 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      CRED_JSON: ${{ secrets.SERVICE_ACCOUNT_KEY }}
+      IMAGE_NAME: kommo_command_love_bali
+      PROJECT_ID: orang-berbakat
+      REGION: us-central1
+      GAR_LOCATION: us-central1-docker.pkg.dev/orang-berbakat/orang-berbakat-image-repo
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: "auth"
+        uses: "google-github-actions/auth@v2"
+        with:
+          credentials_json: "${{ env.CRED_JSON }}"
+
+      - name: "Set up Cloud SDK"
+        uses: "google-github-actions/setup-gcloud@v2"
+
+      - name: "Use gcloud CLI"
+        run: "gcloud info"
+
+      - name: "Docker auth"
+        run: |-
+          gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: "Build the Docker image"
+        run: |-
+          docker build -t ${{ env.GAR_LOCATION }}/${{ env.IMAGE_NAME }}:latest .
+
+      - name: "Push the Docker image"
+        run: |-
+          docker push ${{ env.GAR_LOCATION }}/${{ env.IMAGE_NAME }}:latest
+
+    outputs:
+      #dockerhub_username: ${{ env.DOCKERHUB_USERNAME }}
+      container_name: ${{ env.IMAGE_NAME }}
+      docker_image_url: ${{ env.GAR_LOCATION }}/${{ env.IMAGE_NAME }}:latest
+
+  deploy:
+    runs-on: self-hosted
+    needs: build
+    env:
+      CONTAINER_NAME: ${{ needs.build.outputs.container_name }}
+      DOCKER_IMAGE_URL: ${{ needs.build.outputs.docker_image_url }}
+    steps:
+      #check if container exists (running or stopped) on self-hosted runner if yes then stop it and delete it
+      - name: Check if container exists
+        run: |
+          if [ "$(docker ps -aq -f name=${{ env.CONTAINER_NAME }})" ]; then
+              docker stop ${{ env.CONTAINER_NAME }} || true
+              docker rm ${{ env.CONTAINER_NAME }}
+          fi
+
+      #check if image is present on self-hosted runner if yes then delete it
+      - name: Check if image is present
+        run: |
+          if [ "$(docker images -q ${{ env.DOCKER_IMAGE_URL }})" ]; then
+              docker rmi ${{ env.DOCKER_IMAGE_URL }}
+          fi
+
+      #pull image on self-hosted runner
+      - name: Pull image
+        run: |
+          docker pull ${{ env.DOCKER_IMAGE_URL }}
+
+      - name: "Create deployment configuration files"
+        run: |
+          printf '%s' "$SERVICE_ACCOUNT_KEY" > sa.json
+          printf '%s\n' "$ENV_FILE_CONTENT" > .env
+        env:
+          SERVICE_ACCOUNT_KEY: ${{ secrets.SERVICE_ACCOUNT_KEY }}
+          ENV_FILE_CONTENT: ${{ vars.ENV_FILE }}
+
+      - name: "Create container"
+        run: |
+          docker create --name ${{ env.CONTAINER_NAME }} ${{ env.DOCKER_IMAGE_URL }}
+
+      - name: "Copy configuration into container"
+        run: |
+          docker cp sa.json ${{ env.CONTAINER_NAME }}:/app/sa.json
+          docker cp .env ${{ env.CONTAINER_NAME }}:/app/.env
+
+      #   - name: "Remove local secrets"
+      #     run: |
+      #       rm -f sa.json .env
+
+      - name: "Start container"
+        run: |
+          docker start ${{ env.CONTAINER_NAME }}
