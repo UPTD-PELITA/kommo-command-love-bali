@@ -99,7 +99,7 @@ class LoveBaliAPIService:
                     error_body = {"raw_response": response_obj.text}
 
             message = (
-                f"Love Bali API request failed with status {status_code or 'unknown'}"
+                f"Love Bali API request failed with status {status_code or 'unknown'} with body: {error_body}"
             )
             logger.error(
                 message,
