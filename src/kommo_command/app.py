@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import json
 import logging
 import signal
 import sys
 import threading
 import time
+from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 
 from .config import Settings
 from .config_validator import print_config_help, validate_firebase_config
@@ -20,6 +22,64 @@ from .service_factory import (
 from .handlers import HandlerManager, IncomingLeadHandler, IncomingMessageHandler
 from .logging_setup import configure_logging
 
+def _collect_dotenv_status() -> dict[str, object]:
+    dotenv_path_str = find_dotenv(usecwd=True) or None
+    if dotenv_path_str:
+        dotenv_loaded = load_dotenv(dotenv_path_str)
+        path = Path(dotenv_path_str)
+        status = {
+            "dotenv_found": True,
+            "dotenv_path": str(path),
+            "dotenv_exists": path.exists(),
+            "dotenv_size": path.stat().st_size if path.exists() else 0,
+            "dotenv_loaded": dotenv_loaded,
+        }
+    else:
+        dotenv_loaded = load_dotenv()
+        status = {
+            "dotenv_found": False,
+            "dotenv_path": None,
+            "dotenv_exists": False,
+            "dotenv_size": 0,
+            "dotenv_loaded": dotenv_loaded,
+        }
+    return status
+
+
+def _validate_service_account_file(logger: logging.Logger, path_value: str | None) -> None:
+    if not path_value:
+        logger.error("GOOGLE_SERVICE_ACCOUNT_FILE is required for Firebase Admin SDK")
+        logger.error("Please set the GOOGLE_SERVICE_ACCOUNT_FILE environment variable")
+        logger.error("Example: GOOGLE_SERVICE_ACCOUNT_FILE=/path/to/serviceAccountKey.json")
+        sys.exit(2)
+
+    path = Path(path_value)
+    status = {
+        "service_account_path": str(path),
+        "exists": path.exists(),
+        "is_file": path.is_file(),
+    }
+
+    if not status["exists"] or not status["is_file"]:
+        logger.error("Service account file validation failed", extra=status)
+        sys.exit(2)
+
+    try:
+        contents = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        status["error"] = str(exc)
+        logger.error("Unable to read service account file", extra=status)
+        sys.exit(2)
+
+    try:
+        json.loads(contents)
+    except json.JSONDecodeError as exc:
+        status["error"] = str(exc)
+        logger.error("Service account file is not valid JSON", extra=status)
+        sys.exit(2)
+
+    status["valid_json"] = True
+    logger.info("Service account file validation passed", extra=status)
 
 class GracefulKiller:
     def __init__(self) -> None:
@@ -32,12 +92,18 @@ class GracefulKiller:
 
 
 def run(settings: Settings | None = None) -> None:
-    # Load .env if present
-    load_dotenv()
+    dotenv_status = _collect_dotenv_status()
     settings = settings or Settings.from_env()
     configure_logging(level=settings.log_level)
 
     logger = logging.getLogger(__name__)
+    if dotenv_status["dotenv_found"]:
+        logger.info(".env file validation completed", extra=dotenv_status)
+    else:
+        logger.warning(".env file not found; relying on environment variables", extra=dotenv_status)
+
+    _validate_service_account_file(logger, settings.google_service_account_file)
+
     logger.info("Starting Firebase services", extra={
         "database_url": settings.firebase_database_url,
         "path": settings.firebase_path,
@@ -55,12 +121,6 @@ def run(settings: Settings | None = None) -> None:
         logger.error("FIREBASE_PROJECT_ID is required and was not provided")
         logger.error("Please set the FIREBASE_PROJECT_ID environment variable or create a .env file")
         logger.error("Example: FIREBASE_PROJECT_ID=your-project-id")
-        sys.exit(2)
-
-    if not settings.google_service_account_file:
-        logger.error("GOOGLE_SERVICE_ACCOUNT_FILE is required for Firebase Admin SDK")
-        logger.error("Please set the GOOGLE_SERVICE_ACCOUNT_FILE environment variable")
-        logger.error("Example: GOOGLE_SERVICE_ACCOUNT_FILE=/path/to/serviceAccountKey.json")
         sys.exit(2)
 
     # Validate Kommo configuration
