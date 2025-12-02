@@ -40,12 +40,18 @@ _MESSAGES: Dict[MessageKey, Dict[AppLanguage, str]] = {
     },
     MessageKey.PASSPORT_FOUND: {
         AppLanguage.ENGLISH: (
-            "Passport found: Voucher {code_voucher}, Guest {guest_name}, "
-            "Arrival {arrival_date}, Expiry {expired_date}"
+            "Passport found.\n\n"
+            "Voucher Code:\n{code_voucher}\n\n"
+            "Guest Name:\n{guest_name}\n\n"
+            "Arrival Date:\n{arrival_date}\n\n"
+            "Expired Date:\n{expired_date}"
         ),
         AppLanguage.INDONESIAN: (
-            "Nomor paspor ditemukan: Voucher {code_voucher}, Tamu {guest_name}, "
-            "Tanggal kedatangan {arrival_date}, Berlaku sampai {expired_date}"
+            "Paspor ditemukan.\n\n"
+            "Kode Voucher:\n{code_voucher}\n\n"
+            "Nama Tamu:\n{guest_name}\n\n"
+            "Tanggal Kedatangan:\n{arrival_date}\n\n"
+            "Tanggal Kedaluwarsa:\n{expired_date}"
         ),
     },
 }

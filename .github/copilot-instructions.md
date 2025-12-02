@@ -17,7 +17,8 @@ Event-driven Python bot integrating Firebase Realtime Database, Firestore, and K
 
 ## Development Guidelines
 
-- **Environment**: Always use MCP to get Python executable information for .venv before executing terminal commands
+- **Environment**: This project runs inside a dev container; use the container's preconfigured Python environment for all commands.
+  - Always use the Pylance MCP tools for any Python file analysis or debugging (syntax checks, environment inspection, refactoring, running snippets) instead of shell-based Python invocations.
 - **Service Creation**: Use factory functions from `service_factory.py` instead of direct instantiation
 - **Handler Implementation**: Extend `BaseHandler`, implement `can_handle()` and `handle()` methods
 - **Error Handling**: Services include connection testing and graceful degradation
@@ -28,13 +29,13 @@ Event-driven Python bot integrating Firebase Realtime Database, Firestore, and K
 ## Key Commands
 
 ```bash
-# Setup
-python3 -m venv .venv && source .venv/bin/activate && pip install -e .
+# Setup (inside dev container)
+pip install -e .
 
-# Run
+# Run (inside dev container)
 python -m kommo_command
 
-# Quality tools
+# Quality tools (inside dev container)
 pip install -e ".[dev]"  # Black, Ruff, MyPy, pytest
 ```
 
